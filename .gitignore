@@ -1,3 +1,9 @@
+# CCF Reimbursement Voucher MVP — never commit real approver PII/config.
+# config.example.js and config.pilot.js ARE committed (safe placeholders
+# only); any config.production.js or config.local.js must never be.
+mvp/reimbursement-voucher/js/config.production.js
+mvp/reimbursement-voucher/js/config.local.js
+
 # Logs
 logs
 *.log
