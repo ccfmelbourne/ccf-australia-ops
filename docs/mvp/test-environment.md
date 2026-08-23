@@ -94,6 +94,24 @@ Two things only a human with the right account access can do — I could not pro
 Until both are done, the app will detect the placeholder and refuse to submit — it will not
 fail silently or post to a broken/real endpoint.
 
+## Known Issue: Formspree Spam Filtering
+
+Encountered during this pilot's setup: a freshly created Formspree form initially routed
+legitimate submissions (including manually-submitted, non-automated ones) to Formspree's
+**Spam** tab instead of delivering a notification email — even though the API still returned
+`{"ok": true}` to the app.
+
+The issue was related to Formspree's spam-filtering configuration rather than an application
+error. In the Formspree dashboard, disabling the spam-filtering/reCAPTCHA sensitivity setting
+resolved delivery immediately.
+
+If setting up a new Formspree form for this pilot in the future (e.g. rotating to a fresh
+test form, or eventually creating a production form), check the spam-filtering configuration
+before testing submissions.
+
+Also manually review the Spam tab during initial testing and mark legitimate submissions as
+**Not spam** where appropriate.
+
 ## Running the app locally
 
 It's static HTML/JS — no build step, no dev server strictly required:
