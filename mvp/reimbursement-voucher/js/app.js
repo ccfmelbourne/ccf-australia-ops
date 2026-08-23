@@ -466,7 +466,13 @@ function confirmSubmit() {
         if (b) b.style.display = 'none';
       }, 6000);
     } else {
-      throw new Error(data.error || 'Submission failed. Please try again.');
+      // Formspree's actual error shape is usually { errors: [{ message, field }] },
+      // not a single { error: "..." } string — surface the real reason instead of
+      // always falling through to a generic message.
+      const detail = data.error
+        || (Array.isArray(data.errors) && data.errors.map(e => e.message || e.field).filter(Boolean).join('; '))
+        || 'Submission failed. Please try again.';
+      throw new Error(detail);
     }
   })
   .catch(err => {
