@@ -440,7 +440,6 @@ function confirmSubmit() {
     'Approver Emails':   Object.entries(approverEmails).map(([k,v]) => `${k}: ${v}`).join('\n'),
     'Approver Names':    Object.entries(approverNames).map(([k,v])  => `${k}: ${v}`).join('\n'),
     'Approval Note':     PILOT_SIGNATURE_DISCLAIMER,
-    '_replyto':          document.getElementById('requesterName').value,
   };
 
   const btn = document.getElementById('confirmBtn');
