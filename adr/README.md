@@ -11,5 +11,5 @@ Use this folder for decisions that shape the platform, such as architecture styl
 - Include: status, context, decision, consequences.
 
 ## Current status
-- No ADRs have been recorded yet.
+- `0001-reimbursement-system-of-record.md` — the application (not email/PDF) is the system of record for reimbursements; email is notification only.
 - TODO: Add an ADR for the platform architecture and repository structure.
