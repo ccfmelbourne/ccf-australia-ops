@@ -28,8 +28,12 @@ Capture key decisions, progress, and open items for the repository foundation.
   approval, but only if the request is within budget).
 - ADR 0002: platform architecture is a modular monolith on Next.js, TypeScript, Tailwind,
   Storybook, Zod, Prisma, and PostgreSQL, with domain-scoped internal modules (Finance first).
-  See `adr/0002-platform-architecture.md`. Status: Proposed — not yet reviewed by the full
-  engineering team; object storage provider and platform hosting target are still open.
+  Hosting is Vercel for V1 (Next.js-native, low ops overhead for a volunteer-maintained system;
+  avoids Vercel-specific lock-in so AWS migration stays possible later if ever justified).
+  Receipt/document storage is Cloudflare R2 (S3-compatible), with Amazon S3 as the named
+  fallback. See `adr/0002-platform-architecture.md`. Status: **Accepted** (2026-08-27) —
+  confirmed directly with the project's decision-maker; no separate engineering team exists to
+  loop in.
 - `.github/` governance scaffolding added: PR template, a domain-proposal issue template, and a
   bug-report issue template. No CI workflow yet — no application code exists on `main` to test.
 - `docs/product/README.md` and `docs/development/README.md` filled in with real content
@@ -37,8 +41,11 @@ Capture key decisions, progress, and open items for the repository foundation.
 
 ## Open items
 - TODO: Add an Actions CI workflow once Track B has application code to test on `main`.
-- TODO: Get ADR 0002 (platform architecture) reviewed and marked Accepted by the engineering
-  team; resolve its open questions (object storage provider, hosting target).
-- TODO: Decide whether to bring the confirmed Regional Director/COS-override rule into the live
-  Track A pilot during its remaining test window, or leave the pilot's existing (Oceana-only)
-  rule as-is until Track B is built.
+- TODO: Verify CCF's data residency/privacy requirements against Cloudflare R2's actual
+  available region(s) before the storage choice in ADR 0002 is fully locked in. If Australia-only
+  residency is required and R2 can't guarantee it, switch to Amazon S3 in an Australian region.
+
+## Decided
+- Track A pilot's approval logic will not be updated to match the confirmed Regional
+  Director/COS-override rule — the pilot stays as-is (Oceana-only rule) for the remainder of
+  its test window. Focus going forward is on Track B.

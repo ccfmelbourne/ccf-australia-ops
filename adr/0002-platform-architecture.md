@@ -1,7 +1,7 @@
 # 0002. Platform Architecture: Modular Monolith on Next.js/TypeScript/Prisma/PostgreSQL
 
 ## Status
-Proposed — restates and formally records a stack discussion from earlier architecture planning. Not yet reviewed with the full engineering team; treat the technology choices as strong defaults to confirm, not final until this ADR is marked Accepted.
+Accepted (2026-08-27) — reviewed and confirmed directly with the project's decision-maker; there is no separate engineering team to loop in at this stage. One follow-up verification remains open before the storage choice is fully locked — see "Open questions."
 
 ## Context
 The project charter (`.ai/PROJECT.md`) commits to several architectural principles without naming concrete technology: a modular monolith, domain-driven design with bounded contexts (Finance first), Storybook for reusable UI, test-driven development "where appropriate," and a general preference for "boring, maintainable technology" over novelty. `adr/0001-reimbursement-system-of-record.md` and `specs/0001-reimbursement-approval-finance-workflow.md` further commit the platform to being the authoritative system of record for the Finance domain, with a real database and receipt storage — which the Track A pilot (deliberately, per its own scope) does not have.
@@ -22,8 +22,9 @@ This ADR records the concrete stack and structural shape those principles imply,
 | Component/design system | Storybook (required for reusable UI, per charter) |
 | Schema validation | Zod |
 | ORM | Prisma |
-| Database | PostgreSQL |
-| Receipt/file storage | Object storage (provider not yet chosen — see Open questions) |
+| Database | Managed PostgreSQL |
+| Receipt/file storage | S3-compatible object storage — Cloudflare R2 (primary), Amazon S3 (fallback; see "Hosting and storage" below) |
+| Application hosting | Vercel (V1) |
 
 Rationale: this is a single, consistently-typed stack end to end (TypeScript types flow through Zod validation and Prisma's generated client), each piece is a mainstream, well-supported choice rather than a novel one (matching "prefer boring, maintainable technology"), and Storybook satisfies the charter's explicit reusable-UI requirement directly rather than needing a separate tool.
 
@@ -46,6 +47,42 @@ Rationale: this is a single, consistently-typed stack end to end (TypeScript typ
 
 Each domain module (Reimbursement, Approval, Finance, and future modules) owns its own data access and business logic behind a clear internal boundary, even though all modules share one Next.js app and one database — this is what "modular" means here, not a suggestion to split into separate deployables later without a concrete reason to.
 
+## Hosting and storage
+
+**Application hosting: Vercel for V1.** The expected user base and workload are modest, the
+application is built on Next.js (Vercel's native fit), and minimizing infrastructure/operational
+overhead matters for a volunteer-maintained system. The application avoids unnecessary coupling
+to Vercel-specific services, so it can migrate to AWS or another provider later if scale,
+security, compliance, or integration requirements ever justify it — but no migration work
+happens until there's a demonstrated requirement, not preemptively.
+
+**Receipt/document storage: Cloudflare R2 (S3-compatible), with Amazon S3 as the named
+fallback.** Vercel Blob was considered and is technically viable, but was not chosen — the
+priority is storage portability and a clean path toward AWS if the platform ever migrates,
+which an S3-compatible API gives for free. R2 was preferred over S3 itself for V1 on cost/egress
+grounds while staying API-compatible with the AWS fallback.
+
+```text
+V1 (now)                              Future (if migration is ever justified)
+
+    CCF Platform                          CCF Platform
+         │                                     │
+      Next.js                                AWS
+         │                        ┌────────────┼────────────┐
+ ┌───────┼───────┐                ▼            ▼            ▼
+ ▼       ▼       ▼             Next.js        RDS           S3
+Vercel PostgreSQL Object
+              Storage
+                 │
+                 ▼
+           Cloudflare R2
+           (S3-compatible)
+```
+
+The application code doesn't need to fundamentally change between these two states — that
+portability is the point of choosing an S3-compatible API and avoiding Vercel-specific lock-in
+now, even while V1 runs entirely on Vercel.
+
 ## Consequences
 
 **Positive**
@@ -58,9 +95,12 @@ Each domain module (Reimbursement, Approval, Finance, and future modules) owns i
 - Next.js, Prisma, and PostgreSQL together imply real hosting infrastructure (a managed Postgres instance, a Next.js hosting target) — a meaningfully bigger operational footprint than the Track A pilot's zero-infrastructure static-HTML approach, which was an intentional trade-off for that temporary pilot and is not a precedent this ADR follows.
 
 ## Open questions
-- Object storage provider for receipts is not yet chosen (e.g. S3-compatible, Vercel Blob, Cloudflare R2) — needs a decision when the Reimbursement module's receipt-upload work actually starts, informed by whatever hosting target Next.js itself ends up on.
-- Hosting target for the real platform (Vercel, or something else) is not decided by this ADR — Track A's pilot use of Vercel was scoped to that pilot only (see `docs/mvp/deployment-plan.md`) and doesn't bind Track B.
-- This ADR has not yet been reviewed by the full engineering team; mark Accepted once it has been.
+- **Verify CCF's data residency/privacy requirements against Cloudflare R2's actual available
+  region(s) before the storage choice is fully locked in.** If receipts/documents must be
+  stored within Australia and R2 cannot give that guarantee, switch the primary choice from R2
+  to Amazon S3 in an Australian region instead of compromising on that requirement. This is the
+  one condition under which the storage decision above would change; everything else in this
+  ADR is settled.
 
 ## Related
 - `.ai/PROJECT.md` — charter principles this ADR makes concrete.
