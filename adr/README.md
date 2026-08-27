@@ -12,4 +12,4 @@ Use this folder for decisions that shape the platform, such as architecture styl
 
 ## Current status
 - `0001-reimbursement-system-of-record.md` — the application (not email/PDF) is the system of record for reimbursements; email is notification only.
-- TODO: Add an ADR for the platform architecture and repository structure.
+- `0002-platform-architecture.md` — modular monolith on Next.js/TypeScript/Tailwind/Storybook/Zod/Prisma/PostgreSQL. Status: Proposed, pending full engineering-team review.
