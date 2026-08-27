@@ -9,8 +9,25 @@ Capture key decisions, progress, and open items for the repository foundation.
 - `Open items` — TODO items and unresolved decisions.
 
 ## Notes
-- Foundation phase only; no application code.
+- Foundation phase (no application code) through 2026-08-27, Finance domain only. See
+  "Phase Transition" below and `.ai/PROJECT.md`.
 - Documentation should be brief and cross-referenced.
+
+## Phase Transition (2026-08-27)
+- Foundation phase complete for the Finance domain; Finance V1 implementation begins now. Other
+  future domains remain foundation-only until their own discovery/architecture work is done —
+  that discovery does **not** block Finance implementation.
+- Spec 0002 is the working baseline data model; update it in place (with a note of what changed
+  and why) when implementation reveals a legitimate gap, rather than treating it as final.
+- No Finance capability beyond spec 0001's confirmed V1 scope gets built without being flagged
+  for approval first — see `.ai/PROJECT.md`'s explicit in-scope/not-yet-in-scope lists.
+- Implementation proceeds as small vertical slices (Storybook + tests per relevant slice), not
+  all screens at once. First slice, per direction from the project's decision-maker: Approved
+  Reimbursement → Finance Queue → Accountant opens request → view reimbursement + receipts +
+  approval history → mark next status → audit event recorded. This intentionally starts on the
+  Finance side only, assuming an already-approved reimbursement exists (seeded test data), not
+  building the full request-creation-through-approval flow first.
+- Full detail: `.ai/PROJECT.md` → "Phase Transition: Foundation → Finance V1 Implementation."
 
 ## Decisions
 - Repository structure includes `.ai`, `docs/`, `adr/`, `specs/`, and `.github/`.
