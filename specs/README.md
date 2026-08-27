@@ -11,4 +11,4 @@ Capture business-aligned requirements, domain models, and feature contracts befo
 - Link specs to product context and architecture decisions.
 
 ## Current status
-- `0001-reimbursement-approval-finance-workflow.md` — V1 scope boundary for the reimbursement request → approval → finance queue workflow (draft, pending accountant confirmation on Finance statuses).
+- `0001-reimbursement-approval-finance-workflow.md` — V1 scope boundary for the reimbursement request → approval → finance queue workflow (confirmed with Finance/leadership 2026-08-27).

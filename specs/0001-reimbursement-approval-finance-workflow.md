@@ -1,7 +1,7 @@
 # 0001. Reimbursement — Request, Approval & Finance Workflow (V1 Boundary)
 
 ## Status
-Draft — captured from an architecture discussion defining the V1 scope for Track B (the Operations Platform). Not yet confirmed with the Finance/accounting team; several details below are explicitly marked as needing that confirmation.
+Confirmed (2026-08-27) — the workflow boundary, Finance queue statuses, notification channel, and the Regional Director/COS-override rule below have been reviewed and confirmed with Finance/leadership. Remaining implementation details (data model, exact UI) are still to be worked out at build time, but the business rules themselves are settled, not proposals.
 
 ## Purpose
 Define what V1 of the reimbursement/disbursement workflow does and does not own, so the platform's domain model and architecture can be scoped deliberately rather than growing to cover full accounting integration before it's known to be needed.
@@ -52,40 +52,37 @@ Notify Finance     Finance Queue
 
 The required-approvers step (who, and how many, per request) follows the tiered approval rules already piloted in Track A — see `mvp/reimbursement-voucher/js/approval-rules.js` and `docs/mvp/reimbursement-app-assessment.md` for the reference logic and the bug history worth learning from (approver routing must be driven by the field that actually determines the approver group, and covered by automated tests).
 
-## Proposed refinement: Regional Director override for >$5,000 (pilot feedback — unconfirmed)
+## Regional Director approval & COS override for >$5,000 (confirmed)
 
-Feedback relayed from a Track A pilot tester, not yet confirmed with Finance/leadership:
+Originally relayed as unconfirmed Track A pilot tester feedback; confirmed with Finance/
+leadership on 2026-08-27:
 
 - For **all** ministry types at the >$5,000 tier (not only Oceana, which is the current Track A
-  pilot rule), approval from the Regional Director (Ptr. Ryan Escobar) is required by default.
-- That requirement can be **overridden** if the three named COS — **Ross Callado, Joel Jerez,
-  and Vamie Pinlac** — all approve *and* attest that the expense is already part of an approved
-  budget plan. When overridden, Regional Director approval is not required.
-- The attestation is a real control point, not a UI nicety: proposed as a new field/checkbox
-  these three specific approvers complete to confirm "already part of the approved budget plan"
-  before the override takes effect.
+  pilot rule) — approval from the Regional Director (Ptr. Ryan Escobar) is required by default.
+- That requirement has exactly one alternative path: **unanimous** sign-off from all three named
+  COS — **Ross Callado, Joel Jerez, and Vamie Pinlac** — confirming the expense is within the
+  approved budget plan. All three must approve; there is no quorum/subset option.
+- The override is valid **only if the expense is within budget**. If it is not within budget,
+  the override cannot be used and Regional Director approval remains mandatory regardless of
+  COS sign-off.
+- "Within budget" is determined by the three approvers' own judgement, not a separate budget
+  record lookup — their unanimous approval **is** the within-budget confirmation. No budget-plan
+  data model or external reference is required for V1.
+- The two paths are alternatives, not additive: for any >$5,000 request (any ministry), either
+  the Regional Director approves, **or** all three named COS unanimously approve under the
+  within-budget condition above. Either path satisfies this part of the Tier 4 requirement,
+  alongside the existing 2 COS + Finance Overseer requirement for that request's own ministry
+  group.
+- Implementation-wise, this still needs an attestation mechanism (e.g. a field/checkbox the
+  three named approvers complete) — the *rule* is confirmed, the UI/data model for it is not
+  yet designed.
 
-This is a genuine widening of the control (Regional Director now applies platform-wide at Tier
-4, not just Oceana) paired with a genuine bypass path (the 3-COS attestation), so it should be
-confirmed with Finance/leadership before being built, not implemented from a single secondhand
-report alone.
-
-**Open questions before this is implementable:**
-- Why these three specific COS (Admin, Finance, B1G) and not also Dexter Santiago (Comms COS1)
-  or Ptr. Ryan Escobar's own Oceana COS1 role — intentional, or an artifact of how the feedback
-  was phrased?
-- Does the override require all three, or a subset/quorum?
-- Is "already part of the approved budget plan" just an attestation (trust the three COS), or
-  does it need to reference an actual budget record — which would imply a budget-plan data
-  model this spec doesn't currently define?
-- Does this replace Regional Director approval entirely for that request, or route it as an
-  additional optional path alongside it?
-
-**Explicitly out of scope for now:** the live Track A pilot (`mvp/reimbursement-voucher/`) is
-not being changed to reflect this. Per its own remediation scope, the pilot preserves existing
-business rules unless the code demonstrates a bug — a rule *change* like this belongs in Track B
-design, confirmed with the actual decision-makers, not patched into a temporary pilot from one
-tester's relayed feedback.
+**Explicitly out of scope for now:** the live Track A pilot (`mvp/reimbursement-voucher/`) has
+not been updated to reflect this confirmed rule. Per its own remediation scope, the pilot
+preserves existing business rules unless the code demonstrates a bug; bringing this confirmed
+change into the pilot (so testers exercise the real rule during the remaining test window) is a
+separate decision to make explicitly, not something done automatically because Finance/
+leadership signed off on the Track B spec.
 
 ## Finance queue, not an inbox
 
@@ -101,7 +98,7 @@ Finance
 
 Opening a reimbursement surfaces everything needed to process it without searching email for a PDF: requester, amount, ministry, expenses, receipts, approval history, bank details, timestamps, comments/history.
 
-### Proposed statuses (needs confirmation with the accountant)
+### Statuses (confirmed)
 
 | Status | Meaning |
 |---|---|
@@ -111,11 +108,23 @@ Opening a reimbursement surfaces everything needed to process it without searchi
 | Processed | Accountant confirms processing complete |
 | Rejected/Returned | Something is wrong; sent back |
 
-These exact status names and transitions are a starting proposal, not a locked decision — confirm the real accounting workflow with the accountant before building against them.
+Confirmed with Finance/leadership on 2026-08-27, including how "Needs Clarification" branches
+depending on what's wrong:
+
+- **Missing supporting documentation** (e.g. a missing receipt) — stays a lightweight
+  **Needs Clarification** request back to the requester. Processing pauses; it does not need to
+  go back through approval again once resolved.
+- **Incorrect request details** (e.g. the price/amount is wrong) — this is a substantive change
+  to what was approved, so it must go back through the **full approval workflow again**, not
+  just a clarification. This is the same principle as the "no silent edits" control below —
+  Finance cannot itself change an approved amount or detail.
 
 ## Notification, not workflow
 
-Per `adr/0001-reimbursement-system-of-record.md`, email is a notification channel that links back into the application — it never carries the authoritative data:
+Confirmed with Finance/leadership on 2026-08-27: Finance is notified through **both** the in-app
+Finance queue and email, with **email as the primary channel**. Per
+`adr/0001-reimbursement-system-of-record.md`, email is a notification channel that links back
+into the application — it never carries the authoritative data:
 
 > **Reimbursement #RB-2026-00123 is approved and ready for processing.**
 >
@@ -152,10 +161,15 @@ These may be pulled into scope later if an accountant interview shows they're va
 
 This scope does not require a bespoke or heavyweight backend — the reasoning from the source discussion was that it fits within the platform's already-proposed stack (Next.js, TypeScript, Tailwind, Storybook, Zod, Prisma, PostgreSQL) plus object storage for receipts, without needing a separate service or additional language runtime. That stack choice itself is not re-litigated by this spec; if it needs to be formally recorded, it belongs in its own ADR rather than here.
 
-## Open questions
-- Confirm the Finance status names/transitions above with the accountant.
-- Confirm notification channel(s) beyond email (in-app only vs. email + in-app, per the source discussion's preference for in-app as primary).
-- Define what "Needs Clarification" actually requires from the requester, and whether that reopens approval or not.
+## Confirmation log
+- 2026-08-27 — Finance/leadership confirmed: Finance statuses as listed, the Needs
+  Clarification vs. re-approval distinction, email as primary notification channel (alongside
+  the in-app queue), the Regional Director requirement extending to all ministries at >$5,000,
+  and the 3-COS unanimous within-budget override rule. All open questions from the original
+  draft of this spec are resolved by the above; none remain outstanding.
+- Not yet decided: whether to bring the confirmed Regional Director/COS-override rule into the
+  live Track A pilot during its remaining test window, or leave the pilot as-is and let this
+  rule apply only once Track B is built.
 
 ## References
 - `adr/0001-reimbursement-system-of-record.md`
