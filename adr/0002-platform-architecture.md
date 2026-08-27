@@ -95,12 +95,24 @@ now, even while V1 runs entirely on Vercel.
 - Next.js, Prisma, and PostgreSQL together imply real hosting infrastructure (a managed Postgres instance, a Next.js hosting target) — a meaningfully bigger operational footprint than the Track A pilot's zero-infrastructure static-HTML approach, which was an intentional trade-off for that temporary pilot and is not a precedent this ADR follows.
 
 ## Open questions
-- **Verify CCF's data residency/privacy requirements against Cloudflare R2's actual available
-  region(s) before the storage choice is fully locked in.** If receipts/documents must be
-  stored within Australia and R2 cannot give that guarantee, switch the primary choice from R2
-  to Amazon S3 in an Australian region instead of compromising on that requirement. This is the
-  one condition under which the storage decision above would change; everything else in this
-  ADR is settled.
+- **Confirm CCF's actual data residency/privacy requirement, then apply the technical finding
+  below.** R2 offers two distinct mechanisms, and only one is an enforceable guarantee:
+  - *Location Hints* (`wnam`, `enam`, `weur`, `eeur`, `apac`, `oc` for Oceania) are, in
+    Cloudflare's own words, "best effort and not a guarantee" of where an object is actually
+    stored.
+  - *Jurisdictional Restrictions*, which do guarantee storage stays within a jurisdiction, are
+    only available for `eu`, `fedramp`, and `us` — **there is no Australia or APAC jurisdictional
+    restriction**, and the jurisdiction can't be changed after a bucket is created.
+  - So: if CCF's requirement is a genuine guarantee that receipts/documents never leave
+    Australia (e.g. under the Privacy Act or a funder/board policy), **R2 cannot meet that today**
+    — switch the storage choice to Amazon S3 in `ap-southeast-2` (Sydney), which does offer a
+    real region-locked bucket. If the requirement is softer (a preference for low-latency
+    APAC storage, not a compliance guarantee), R2's `oc` location hint is sufficient and the
+    storage choice above stands as-is. This requirement itself has not been confirmed with the
+    decision-maker — that confirmation, not further technical research, is what's left.
+
+    (Sources: [Cloudflare R2 data location docs](https://developers.cloudflare.com/r2/reference/data-location/),
+    [R2 Data Localization Suite docs](https://developers.cloudflare.com/data-localization/how-to/r2/).)
 
 ## Related
 - `.ai/PROJECT.md` — charter principles this ADR makes concrete.
