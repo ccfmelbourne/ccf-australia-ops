@@ -12,3 +12,4 @@ Capture business-aligned requirements, domain models, and feature contracts befo
 
 ## Current status
 - `0001-reimbursement-approval-finance-workflow.md` — V1 scope boundary for the reimbursement request → approval → finance queue workflow (confirmed with Finance/leadership 2026-08-27).
+- `0002-reimbursement-data-model-api.md` — data model and API contract sketch for the Finance domain (Prisma-flavored, illustrative). Draft — not yet validated against a real implementation attempt.

@@ -38,12 +38,21 @@ Capture key decisions, progress, and open items for the repository foundation.
   bug-report issue template. No CI workflow yet — no application code exists on `main` to test.
 - `docs/product/README.md` and `docs/development/README.md` filled in with real content
   (Finance domain V1 summary; stack, branching, commit, and testing conventions).
+- Spec 0002: illustrative Prisma-flavored data model and API/action contract for the Finance
+  domain (User, ReimbursementRequest, LineItem, Receipt, BankDetails, RequiredApproval,
+  RegionalDirectorOverride/OverrideApproval, AuditLogEntry). See
+  `specs/0002-reimbursement-data-model-api.md`. Draft — flags the tier-4 approval OR-branching
+  as needing its own model, carries forward the pilot's sensitive-data (bank details) and
+  voucher-numbering (no `Math.random()`) findings, and is not yet validated against a real
+  implementation attempt.
 
 ## Open items
 - TODO: Add an Actions CI workflow once Track B has application code to test on `main`.
 - TODO: Verify CCF's data residency/privacy requirements against Cloudflare R2's actual
   available region(s) before the storage choice in ADR 0002 is fully locked in. If Australia-only
   residency is required and R2 can't guarantee it, switch to Amazon S3 in an Australian region.
+- TODO: Validate spec 0002's data model against a real implementation attempt; resolve its open
+  questions (role/assignment modeling, multi-group membership, receipt upload constraints).
 
 ## Decided
 - Track A pilot's approval logic will not be updated to match the confirmed Regional
