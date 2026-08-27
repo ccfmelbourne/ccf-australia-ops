@@ -63,6 +63,43 @@ Capture key decisions, progress, and open items for the repository foundation.
   voucher-numbering (no `Math.random()`) findings, and is not yet validated against a real
   implementation attempt.
 
+## Slice 1: Finance Queue → Request Detail → Mark Status (2026-08-27)
+Built on branch `feature/finance-v1-slice-1`, not yet merged. Approved Reimbursement (seeded) →
+Finance Queue → accountant opens request → views line items/receipts/approval history → marks
+next status → audit event recorded, per the vertical slice the project's decision-maker
+specified. Scaffolded under `platform/` (Next.js 16 / React 19 / TypeScript / Tailwind / Storybook /
+Zod / Prisma 7, per ADR 0002).
+
+- Schema (`platform/prisma/schema.prisma`): slice-1 subset of spec 0002 — User, ReimbursementRequest,
+  LineItem, Receipt, RequiredApproval, AuditLogEntry. `BankDetails` and
+  `RegionalDirectorOverride`/`OverrideApproval` intentionally deferred (not touched by this
+  slice's UI) — spec 0002 to be updated when a later slice needs them.
+- Status state machine (`platform/src/lib/status-transitions.ts` + tests): READY_FOR_PROCESSING ->
+  PROCESSING/NEEDS_CLARIFICATION/REJECTED_RETURNED, PROCESSING -> PROCESSED/etc., mirroring the
+  Needs-Clarification-vs-re-approval distinction Finance/leadership confirmed in spec 0001.
+- Finance login: minimal, single env-configured accountant identity (signed session cookie),
+  per explicit direction to keep slice-1 auth minimal — see `platform/src/lib/finance-auth.ts` and
+  `.ai/PROJECT.md`.
+- 6 Storybook stories across 5 components (StatusBadge, QueueList, ApprovalHistoryList,
+  StatusTransitionForm, RequestDetailView) — all render with static fixture data, no DB needed
+  to run Storybook.
+- Verified: `tsc --noEmit` clean, `node --test` 7/7 passing, `next lint` clean, `next build`
+  succeeds, `storybook build` succeeds, and — against a real Vercel-provisioned Postgres
+  (Neon, Sydney/`ap-southeast-2`, resource name `ccf-finance-db`) — the full slice verified live
+  with a headless browser: login → session → queue shows seeded voucher → detail page shows
+  line items/receipts/approval history → status transition (Ready for Processing → Processing)
+  persists across a fresh reload → `AuditLogEntry` row confirmed created with correct actor and
+  from/to detail.
+- Notable corrections made while building (see PR/commit for detail): avoided "Prisma Composer"
+  (Prisma's own competing cloud-hosting product, which `prisma init` now defaults toward) in
+  favor of traditional Prisma ORM against our own Postgres, matching ADR 0002's actual Vercel
+  decision; Next.js 16 renamed Middleware to Proxy (`src/proxy.ts`, not `middleware.ts`); fixed
+  a `platform/.gitignore` `.env*` rule that was accidentally also excluding `.env.example`; added
+  `tsx` as a dev dependency to run standalone scripts (seed) outside Next's bundler, since the
+  generated Prisma client's bundler-style imports don't resolve under plain `node`.
+- Not yet done: Jira epic/stories (no Jira integration available yet — pending the
+  decision-maker adding one), merging this branch.
+
 ## Open items
 - TODO: Add an Actions CI workflow once Track B has application code to test on `main`.
 - TODO: Verify CCF's data residency/privacy requirements against Cloudflare R2's actual
