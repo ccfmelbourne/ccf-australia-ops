@@ -1,0 +1,140 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+//
+// Slice-1 subset of specs/0002-reimbursement-data-model-api.md (repo root).
+// Intentionally NOT modeled yet (out of scope for this vertical slice; add
+// when a later slice actually needs them, per the charter's "update the
+// spec/schema when implementation reveals a gap" rule):
+//   - BankDetails (not shown anywhere in the Finance-side slice-1 UI)
+//   - RegionalDirectorOverride / OverrideApproval (approval creation isn't
+//     part of this slice — slice 1 starts from an already-approved request)
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum RequestType {
+  CASH_ADVANCE
+  REIMBURSEMENT
+  LIQUIDATION_OF_CASH_ADVANCE
+  BENEVOLENCE
+  PAYMENT_TO_SUPPLIER
+  STATE_INTERNATIONAL_TRANSFER
+}
+
+// Mirrors the 10 "Ministry Type" values from the Track A pilot
+// (mvp/reimbursement-voucher/js/approval-rules.js MINISTRY_TYPE_TO_APPROVAL_GROUP).
+enum MinistryType {
+  ADMIN
+  EXALT_LIVE_PROD
+  FINANCE
+  NXTGEN
+  PASTORAL_CARE
+  B1G
+  ELEVATE
+  EVENTS_HOST
+  COMMS_MEDIA_DGM
+  OCEANA_REGIONAL
+}
+
+enum RequestStatus {
+  DRAFT
+  SUBMITTED
+  IN_APPROVAL
+  APPROVED
+  READY_FOR_PROCESSING
+  NEEDS_CLARIFICATION
+  PROCESSING
+  PROCESSED
+  REJECTED_RETURNED
+}
+
+enum ApproverRole {
+  MINISTRY_OVERSEER
+  COS1
+  COS2
+  FINANCE_OVERSEER
+  REGIONAL_DIRECTOR
+}
+
+enum ApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model User {
+  id        String   @id @default(cuid())
+  name      String
+  email     String   @unique
+  createdAt DateTime @default(now())
+
+  requestsMade  ReimbursementRequest[] @relation("Requester")
+  approvals     RequiredApproval[]
+  auditEntries  AuditLogEntry[]
+}
+
+model ReimbursementRequest {
+  id           String        @id @default(cuid())
+  voucherNo    String        @unique
+  requestType  RequestType
+  ministryType MinistryType
+  requesterId  String
+  requester    User          @relation("Requester", fields: [requesterId], references: [id])
+  totalAmount  Decimal       @db.Decimal(12, 2)
+  status       RequestStatus @default(DRAFT)
+  submittedAt  DateTime?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  lineItems         LineItem[]
+  receipts          Receipt[]
+  requiredApprovals RequiredApproval[]
+  auditLog          AuditLogEntry[]
+}
+
+model LineItem {
+  id                     String               @id @default(cuid())
+  reimbursementRequestId String
+  request                ReimbursementRequest @relation(fields: [reimbursementRequestId], references: [id])
+  description            String
+  amount                 Decimal              @db.Decimal(12, 2)
+}
+
+model Receipt {
+  id                     String               @id @default(cuid())
+  reimbursementRequestId String
+  request                ReimbursementRequest @relation(fields: [reimbursementRequestId], references: [id])
+  storageKey             String
+  uploadedAt             DateTime             @default(now())
+}
+
+model RequiredApproval {
+  id                     String               @id @default(cuid())
+  reimbursementRequestId String
+  request                ReimbursementRequest @relation(fields: [reimbursementRequestId], references: [id])
+  role                   ApproverRole
+  approverUserId         String?
+  approver               User?                @relation(fields: [approverUserId], references: [id])
+  status                 ApprovalStatus       @default(PENDING)
+  decidedAt              DateTime?
+  comments               String?
+
+  @@unique([reimbursementRequestId, role])
+}
+
+model AuditLogEntry {
+  id                     String               @id @default(cuid())
+  reimbursementRequestId String
+  request                ReimbursementRequest @relation(fields: [reimbursementRequestId], references: [id])
+  actorUserId            String
+  actor                  User                 @relation(fields: [actorUserId], references: [id])
+  action                 String
+  details                Json?
+  createdAt              DateTime             @default(now())
+}
