@@ -5,8 +5,9 @@ Draft — a concrete, illustrative pass at the data model and API shape implied 
 `specs/0001-reimbursement-approval-finance-workflow.md` and `adr/0002-platform-architecture.md`
 (Prisma/PostgreSQL). This is documentation, not implementation: the Prisma-flavored schema below
 is a starting point for whoever writes the real `schema.prisma`, not a file to copy verbatim.
-Not yet reviewed against a real implementation attempt, which may surface changes this sketch
-doesn't anticipate.
+Partially validated against a real implementation attempt (Finance V1 slice 1 — see
+"Validated against slice 1" below); the request-creation/approval-routing half of this sketch
+remains unvalidated, since slice 1 starts from an already-approved request.
 
 ## Purpose
 Go one level more concrete than spec 0001 — from workflow/business rules to the actual
@@ -270,6 +271,32 @@ isn't backed by any authority. The real platform needs an atomic, database-backe
 (e.g. a Postgres sequence, or a serialized counter row with a transaction) to guarantee
 uniqueness under concurrent submissions.
 
+## Validated against slice 1
+
+Finance V1 slice 1 (`platform/prisma/schema.prisma`) implemented the `User`,
+`ReimbursementRequest`, `LineItem`, `Receipt`, `RequiredApproval`, and `AuditLogEntry` models
+essentially as sketched, confirming the shape holds up under a real Prisma/PostgreSQL
+implementation. Differences worth folding back in:
+
+- `BankDetails` and `RegionalDirectorOverride`/`OverrideApproval` were deferred, not disproven —
+  slice 1's Finance-side UI never touches bank details or override creation, so there was nothing
+  to validate them against yet. Still to be validated whenever a later slice implements request
+  submission/override handling.
+- `Decimal` fields (`totalAmount`, `LineItem.amount`) needed explicit precision —
+  `@db.Decimal(12, 2)` — which this sketch's `Decimal` didn't specify. Carry that precision
+  forward into any future model using money amounts.
+- Prisma 7 requires an explicit `generator` block with `provider = "prisma-client"` and a custom
+  `output` path (this sketch didn't show a `generator` block at all, since it predates that
+  requirement being confirmed).
+- The role/assignment open question below got a partial, practical answer for the Finance side
+  specifically: slice 1 doesn't add a separate role/assignment table. Instead, the single
+  env-configured Finance identity is lazily upserted into `User` by email
+  (`getOrCreateAccountantUser` in `platform/src/app/finance/actions.ts`) the first time it's
+  needed, and `AuditLogEntry.actorUserId` simply points at that row. This works because slice 1
+  has exactly one Finance user; it does not resolve how *approver* role assignment (Ministry
+  Overseer/COS1/COS2/Finance Overseer per ministry group) should be modeled once request
+  submission/routing exists — that part of the open question below is still open.
+
 ## Open questions
 - Should `User` carry role/permission data directly, or is that a separate
   `MinistryApproverAssignment`-style table (who currently holds Ministry Overseer/COS1/COS2/
@@ -277,8 +304,9 @@ uniqueness under concurrent submissions.
   is the starting data either way — this is about where it lives, not what it contains.
 - Multi-ministry-group membership: can one person hold a named role in more than one group at
   once (the pilot's reference data doesn't show it today, but doesn't rule it out structurally)?
-- Receipt handling: virus/malware scanning on upload, accepted file types/size limits — not
-  addressed by this sketch.
+- Receipt handling: virus/malware scanning on upload, accepted file types/size limits — still not
+  addressed. Slice 1 only *displays* receipts (`RequestDetailView`) via a seeded `storageKey`;
+  there is no upload UI or upload action yet in the implementation to validate this against.
 - Does "Area" (the physical location field — Bendigo/Geelong/South East/Tottenham) need to be
   modeled at all beyond an informational string, given it doesn't drive approval routing?
 
