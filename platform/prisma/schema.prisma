@@ -72,6 +72,11 @@ model User {
   id        String   @id @default(cuid())
   name      String
   email     String   @unique
+  googleSub String?  @unique // Google's stable "sub" claim; nullable so existing
+                              // Finance/seeded rows (created before Google sign-in existed)
+                              // stay valid, and so a first Google sign-in can match-or-create
+                              // by email then backfill this.
+  picture   String?  // Google profile picture URL, display only
   createdAt DateTime @default(now())
 
   requestsMade  ReimbursementRequest[] @relation("Requester")
