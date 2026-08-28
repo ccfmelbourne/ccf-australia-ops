@@ -169,6 +169,61 @@ this doesn't lock in that decision yet.
   still in progress with the decision-maker at time of writing. Live verification (an actual
   upload + signed-URL fetch round-trip) is a follow-up once credentials exist.
 
+## Phase Transition: Finance V1 → Request Creation + Approval Routing (2026-08-28)
+The decision-maker explicitly approved expanding beyond Finance V1's original charter boundary
+(which was Finance-office-only, starting from an already-approved request) into building the
+front half of the workflow: request creation and approval routing. A full slice roadmap was
+planned (see the plan file referenced in this session) before any code was written, per the
+charter's incremental-vertical-slice discipline. Roadmap: (1) Google sign-in, (2) create-DRAFT
+request + line items, (3) receipt upload wiring, (4) bank details, (5) my-requests list, (6)
+approval-routing logic module, (7) submit action, (8) approver UI + approve/reject, (9) tier-4
+override branch, (10) Request Changes/re-approval cycle. Only (1) is built so far — see below.
+
+## Slice 4: Google Sign-In (2026-08-28)
+Requesters/approvers need individual identity (unlike Finance's single shared credential) —
+~15-20 real named people per the pilot's approver reference table. Decision-maker chose Google
+OAuth (everyone has a Google account); after reviewing Auth.js v5 (still beta-tagged on npm) the
+decision-maker chose **`arctic`** (stable `3.7.0`) instead, reusing the app's own proven
+HMAC-signed cookie session pattern rather than adopting a third-party session library.
+
+- `platform/src/lib/google-oauth.ts` + test: thin `arctic` wrapper. `buildAuthorizationRequest`
+  is directly testable (checks the constructed URL's params); `resolveGoogleProfile` calls
+  Google's userinfo endpoint with the access token (arctic doesn't verify/decode ID tokens
+  itself, so this is the standard pattern for this library) — not unit tested, same as other
+  network-calling functions in this codebase (`sendStatusChangeEmail`, `uploadReceipt`).
+- `platform/src/lib/user-session.ts`: generalizes `finance-auth.ts`'s HMAC-sign/verify pattern to
+  carry a `userId`. Uses a separate cookie (`app_session`) from Finance's `finance_session` —
+  fully independent, no shared state, Finance's existing login is completely untouched.
+- `platform/src/app/api/auth/google/route.ts` + `callback/route.ts`: the OAuth redirect +
+  callback, resolving/creating the matching `User` row by email (same pattern as
+  `getOrCreateAccountantUser` in `finance/actions.ts`), backfilling `googleSub`/`picture`.
+- `platform/src/app/requester-login/page.tsx`: separate "Sign in with Google" entry point, not
+  merged into the existing Finance-only `/login` page.
+- Schema: added nullable+unique `googleSub` and nullable `picture` to `User`. Applied via a
+  manually-authored migration (`prisma migrate dev` refuses non-interactive shells in this
+  Prisma version — used `prisma migrate diff --script` to generate the SQL, then
+  `prisma migrate deploy`, which is designed for non-interactive/CI use) against the real
+  Postgres.
+- Added `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` / `GOOGLE_REDIRECT_URI` /
+  `APP_SESSION_SECRET` to `platform/.env.example`.
+- Verified: `tsc --noEmit` clean, `node --test` 17/17 passing (2 new), `next lint` clean, `next
+  build` succeeds with no Google/session env vars set (`/api/auth/google` and its callback both
+  register as dynamic routes, `/requester-login` as static — none touched at build time).
+- **Update (2026-08-28, later same day):** Google Cloud OAuth client provisioned (External
+  audience, Testing mode, since requesters/approvers use personal Gmail rather than a CCF
+  Workspace domain). Live-verified with a real sign-in: `User` row created with `googleSub`/
+  `picture` populated, confirmed directly in the database.
+- **Bug found and fixed during live verification:** the callback originally redirected to `/`,
+  which unconditionally redirects to Finance's own unrelated login — since no requester-facing
+  page exists yet, this made a successful Google sign-in look like it had failed. Fixed to
+  redirect back to `/requester-login`, which now shows a signed-in state (name/email + sign out)
+  instead of just the sign-in button once a session exists. Re-verified: signed-out shows the
+  sign-in button, a valid session shows the correct signed-in account, sign-out clears it
+  correctly back to signed-out.
+- Also observed: a double-click on "Sign in with Google" can overwrite the in-flight OAuth state
+  cookie, causing the first attempt to fail with `invalid_state` while a retry succeeds. Not
+  fixed this slice — noted as a known rough edge, not a blocker.
+
 ## Open items
 None currently tracked as blocking.
 
