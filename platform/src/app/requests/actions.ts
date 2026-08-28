@@ -3,8 +3,24 @@
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { getCurrentUserId } from "@/lib/user-session";
-import { createDraftRequest, addLineItem, removeLineItem } from "@/lib/request-data";
+import {
+  createDraftRequest,
+  addLineItem,
+  removeLineItem,
+  assertOwnsDraftRequest,
+  addReceiptRecord,
+  removeReceiptRecord,
+  getReceiptStorageKeyForOwner,
+} from "@/lib/request-data";
 import { REQUEST_TYPES, MINISTRY_TYPES } from "@/lib/request-types";
+import {
+  assertValidReceiptFile,
+  buildReceiptStorageKey,
+  uploadReceipt,
+  deleteReceipt,
+  downloadReceiptBytes,
+} from "@/lib/receipt-storage";
+import { receiptExtractionService, type ReceiptExtractionResult } from "@/lib/receipt-extraction";
 
 const createDraftSchema = z.object({
   requestType: z.enum(REQUEST_TYPES),
@@ -83,6 +99,76 @@ export async function removeLineItemAction(
   try {
     await removeLineItem(lineItemId, userId);
     return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Something went wrong." };
+  }
+}
+
+export async function uploadReceiptAction(
+  requestId: string,
+  formData: FormData,
+): Promise<{ ok: boolean; error?: string }> {
+  const userId = await getCurrentUserId();
+  if (!userId) {
+    return { ok: false, error: "Not signed in." };
+  }
+
+  const file = formData.get("file");
+  if (!(file instanceof File) || file.size === 0) {
+    return { ok: false, error: "Choose a file to upload." };
+  }
+
+  try {
+    assertValidReceiptFile({ size: file.size, contentType: file.type });
+    // Checked before the R2 upload (not just inside addReceiptRecord
+    // afterward) so an invalid/expired session doesn't waste an upload.
+    await assertOwnsDraftRequest(requestId, userId);
+
+    const storageKey = buildReceiptStorageKey(requestId, file.name);
+    const buffer = Buffer.from(await file.arrayBuffer());
+    await uploadReceipt(storageKey, buffer, file.type);
+    await addReceiptRecord(requestId, userId, storageKey);
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Something went wrong." };
+  }
+}
+
+export async function removeReceiptAction(
+  receiptId: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const userId = await getCurrentUserId();
+  if (!userId) {
+    return { ok: false, error: "Not signed in." };
+  }
+  try {
+    const { storageKey } = await removeReceiptRecord(receiptId, userId);
+    await deleteReceipt(storageKey);
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Something went wrong." };
+  }
+}
+
+// Opt-in, purely a suggestion: returns extracted fields for the requester
+// to review/edit/discard in the UI. Never writes anything -- confirming a
+// suggestion still goes through the normal addLineItemAction, same as a
+// manually-typed line item.
+export async function extractReceiptAction(
+  receiptId: string,
+): Promise<{ ok: boolean; result?: ReceiptExtractionResult; error?: string }> {
+  const userId = await getCurrentUserId();
+  if (!userId) {
+    return { ok: false, error: "Not signed in." };
+  }
+  const storageKey = await getReceiptStorageKeyForOwner(receiptId, userId);
+  if (!storageKey) {
+    return { ok: false, error: "Receipt not found." };
+  }
+  try {
+    const { buffer, contentType } = await downloadReceiptBytes(storageKey);
+    const result = await receiptExtractionService.extract({ buffer, contentType });
+    return { ok: true, result };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : "Something went wrong." };
   }

@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { formatAmount } from "@/lib/money";
+import { getReceiptDownloadUrl } from "@/lib/receipt-storage";
 import type { RequestTypeValue, MinistryTypeValue } from "@/lib/request-types";
 
 // Uses array-form prisma.$transaction([...]) throughout (matches
@@ -17,6 +18,17 @@ export interface DraftLineItemView {
   amount: string; // formatted, e.g. "245.80"
 }
 
+export interface DraftReceiptView {
+  id: string;
+  filename: string; // derived from storageKey for display
+  uploadedAt: string; // ISO date
+  // Signed URL, computed at render time — expires after a few minutes
+  // (getReceiptDownloadUrl's default). A plain <a href> avoids the
+  // popup-blocker/timing issues of fetching it on click; if it's expired
+  // by the time someone clicks, reloading the page gets a fresh one.
+  viewUrl: string;
+}
+
 export interface DraftRequestView {
   id: string;
   voucherNo: string;
@@ -24,6 +36,14 @@ export interface DraftRequestView {
   ministryType: MinistryTypeValue;
   totalAmount: string; // formatted
   lineItems: DraftLineItemView[];
+  receipts: DraftReceiptView[];
+}
+
+// storageKey is "receipts/{requestId}/{uuid}-{safeName}" (buildReceiptStorageKey
+// in receipt-storage.ts) -- strip the folder and UUID prefix for display.
+function receiptFilename(storageKey: string): string {
+  const base = storageKey.split("/").pop() ?? storageKey;
+  return base.replace(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}-/, "");
 }
 
 async function nextVoucherNo(): Promise<string> {
@@ -70,6 +90,15 @@ export async function createDraftRequest(
   return { id: request.id };
 }
 
+export async function assertOwnsDraftRequest(requestId: string, requesterId: string): Promise<void> {
+  const request = await prisma.reimbursementRequest.findFirst({
+    where: { id: requestId, requesterId, status: "DRAFT" },
+  });
+  if (!request) {
+    throw new Error("Draft request not found.");
+  }
+}
+
 // Scoped to the requester's own DRAFT requests only -- can't see/edit
 // someone else's request, and can't edit past DRAFT (no silent edits after
 // submission, per spec 0001's "no silent edits" control).
@@ -79,9 +108,17 @@ export async function getDraftRequest(
 ): Promise<DraftRequestView | null> {
   const r = await prisma.reimbursementRequest.findFirst({
     where: { id, requesterId, status: "DRAFT" },
-    include: { lineItems: true },
+    include: { lineItems: true, receipts: true },
   });
   if (!r) return null;
+  const receipts = await Promise.all(
+    r.receipts.map(async (rec) => ({
+      id: rec.id,
+      filename: receiptFilename(rec.storageKey),
+      uploadedAt: rec.uploadedAt.toISOString(),
+      viewUrl: await getReceiptDownloadUrl(rec.storageKey),
+    })),
+  );
   return {
     id: r.id,
     voucherNo: r.voucherNo,
@@ -93,6 +130,7 @@ export async function getDraftRequest(
       description: li.description,
       amount: formatAmount(li.amount),
     })),
+    receipts,
   };
 }
 
@@ -106,12 +144,7 @@ export async function addLineItem(
   // transaction below) -- matches the array-transaction pattern already
   // proven in finance-data.ts, where each transaction member is an
   // independent op rather than a sequentially-dependent interactive one.
-  const request = await prisma.reimbursementRequest.findFirst({
-    where: { id: requestId, requesterId, status: "DRAFT" },
-  });
-  if (!request) {
-    throw new Error("Draft request not found.");
-  }
+  await assertOwnsDraftRequest(requestId, requesterId);
   // Atomic increment, not a re-fetch-and-sum -- avoids needing to read the
   // new line item back before updating the total, so both ops here are
   // genuinely independent and safe as an array transaction.
@@ -145,4 +178,56 @@ export async function removeLineItem(lineItemId: string, requesterId: string): P
       data: { totalAmount: { decrement: lineItem.amount } },
     }),
   ]);
+}
+
+// The actual R2 upload happens separately (src/lib/receipt-storage.ts) --
+// this only records the resulting storageKey. Receipts don't affect
+// totalAmount, so a single create needs no transaction.
+export async function addReceiptRecord(
+  requestId: string,
+  requesterId: string,
+  storageKey: string,
+): Promise<{ id: string }> {
+  await assertOwnsDraftRequest(requestId, requesterId);
+  const receipt = await prisma.receipt.create({
+    data: { reimbursementRequestId: requestId, storageKey },
+  });
+  return { id: receipt.id };
+}
+
+// Ownership check only (not status-gated, unlike the mutating receipt
+// functions) -- used to fetch the file for scanning, which is read-only.
+export async function getReceiptStorageKeyForOwner(
+  receiptId: string,
+  requesterId: string,
+): Promise<string | null> {
+  const receipt = await prisma.receipt.findUnique({
+    where: { id: receiptId },
+    include: { request: true },
+  });
+  if (!receipt || receipt.request.requesterId !== requesterId) {
+    return null;
+  }
+  return receipt.storageKey;
+}
+
+// Returns the storageKey so the caller can also delete the R2 object --
+// this function only removes the DB record.
+export async function removeReceiptRecord(
+  receiptId: string,
+  requesterId: string,
+): Promise<{ storageKey: string }> {
+  const receipt = await prisma.receipt.findUnique({
+    where: { id: receiptId },
+    include: { request: true },
+  });
+  if (
+    !receipt ||
+    receipt.request.requesterId !== requesterId ||
+    receipt.request.status !== "DRAFT"
+  ) {
+    throw new Error("Receipt not found.");
+  }
+  await prisma.receipt.delete({ where: { id: receiptId } });
+  return { storageKey: receipt.storageKey };
 }
