@@ -100,10 +100,44 @@ Zod / Prisma 7, per ADR 0002).
 - Not yet done: Jira epic/stories (no Jira integration available yet — pending the
   decision-maker adding one), merging this branch.
 
+## Slice 2: Requester Email Notifications (2026-08-28)
+Built on branch `feature/finance-v1-requester-notifications`, not yet merged. Fills the last
+unbuilt item from Finance V1's confirmed scope list (`.ai/PROJECT.md`): email the requester
+whenever Finance changes their request's status.
+
+- Scope decided with the project's decision-maker before building: spec 0001's literal
+  confirmed example ("Finance is notified... ready for processing") isn't reachable yet, since
+  the approval-routing code that would trigger it doesn't exist — slice 1 starts from an
+  already-approved, seeded request. Built the buildable half instead: notify the **requester**
+  when Finance transitions status (Needs Clarification/Processing/Processed/Rejected-Returned),
+  which slice 1's existing `transitionRequestStatus` already supports.
+- Email provider decided with the decision-maker: Resend (`platform/src/lib/notifications.ts`),
+  clarified that it only affects the sending side — recipients (Finance's Gmail, a requester's
+  own address, anything) receive mail in their normal inbox exactly as before; Resend just needs
+  a verified "from" domain CCF controls.
+- `buildStatusChangeEmail` kept as a pure, directly-testable function (mirrors the
+  `status-transitions.ts` pattern) separate from `sendStatusChangeEmail`'s actual Resend call;
+  added `notifications.test.ts`. Promoted the shared status-label map to
+  `FINANCE_STATUS_LABELS` in `status-transitions.ts` so `StatusBadge` and the email use the same
+  wording.
+- `transitionRequestStatus` (`finance-data.ts`) now returns the requester's email/name and the
+  formatted voucher/amount so `actions.ts` can send the notification after a successful
+  transition. Per ADR 0001 (email is a notification channel only, never authoritative), a
+  send failure is caught and logged, not allowed to fail or roll back the status transition it's
+  reporting on.
+- Verified: `tsc --noEmit` clean, `node --test` 9/9 passing (2 new), `next lint` clean, `next
+  build` succeeds without `RESEND_API_KEY`/`EMAIL_FROM_ADDRESS` set (confirms the build never
+  needs them, since the Finance routes are `force-dynamic`), and — against the real
+  Vercel-provisioned Postgres, with Resend intentionally left unconfigured — a live headless
+  browser run confirmed the status transition still succeeds and persists (200 OK, badge updated
+  after reload) while the console logged the expected "Failed to send status change email:
+  RESEND_API_KEY is not set" error, proving the resilience behavior works as designed.
+- Added `RESEND_API_KEY` / `EMAIL_FROM_ADDRESS` to `platform/.env.example`. Real Resend
+  configuration (domain verification, API key) is still needed before requesters will actually
+  receive these emails — not yet done.
+
 ## Open items
-- TODO: Validate spec 0002's data model against a real implementation attempt; resolve its open
-  questions (role/assignment modeling, multi-group membership, receipt upload constraints).
-  (In review — see PR #4.)
+None currently tracked as blocking.
 
 ## Decided
 - Track A pilot's approval logic will not be updated to match the confirmed Regional

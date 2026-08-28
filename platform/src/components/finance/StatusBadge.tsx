@@ -1,12 +1,5 @@
 import type { FinanceStatus } from "@/types/finance";
-
-const LABELS: Record<FinanceStatus, string> = {
-  READY_FOR_PROCESSING: "Ready for Processing",
-  NEEDS_CLARIFICATION: "Needs Clarification",
-  PROCESSING: "Processing",
-  PROCESSED: "Processed",
-  REJECTED_RETURNED: "Rejected / Returned",
-};
+import { FINANCE_STATUS_LABELS as LABELS } from "@/lib/status-transitions";
 
 const STYLES: Record<FinanceStatus, string> = {
   READY_FOR_PROCESSING: "bg-teal-50 text-teal-800 border-teal-300",

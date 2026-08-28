@@ -16,7 +16,7 @@ export function QueueList({ items }: { items: QueueItemView[] }) {
       <thead>
         <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500">
           <th className="py-2 pr-4">Voucher</th>
-          <th className="py-2 pr-4">Requester</th>
+          <th className="py-2 pr-4">Requested by</th>
           <th className="py-2 pr-4">Ministry</th>
           <th className="py-2 pr-4 text-right">Amount</th>
           <th className="py-2 pr-4">Status</th>
