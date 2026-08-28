@@ -135,6 +135,39 @@ whenever Finance changes their request's status.
 - Added `RESEND_API_KEY` / `EMAIL_FROM_ADDRESS` to `platform/.env.example`. Real Resend
   configuration (domain verification, API key) is still needed before requesters will actually
   receive these emails — not yet done.
+- Follow-up UX polish on the same request detail page, from review feedback: a "Back to queue"
+  button (styled button, real `Link` underneath so right-click/open-in-new-tab/prefetch still
+  work); a spinner alongside "Submitting…"; the status form's button renamed "Update status" ->
+  "Submit"; the queue table's "Requester" column renamed "Requested by"; and the post-submit
+  state fixed to track the *actual new status* (not the stale `currentStatus` prop) so
+  submitting into a terminal status (Processed/Rejected-Returned) shows the same "no further
+  action needed" message used on initial load, instead of a disabled form implying more actions
+  remain — and removed the inline "Status updated" confirmation entirely once the toast covered
+  the same information, to avoid showing both.
+
+## Slice 3: Receipt Storage Infrastructure (2026-08-28)
+Not yet on its own branch/PR at time of writing. Reusable Cloudflare R2 (S3-compatible) upload/
+download plumbing (`platform/src/lib/receipt-storage.ts`), built ahead of deciding which
+higher-level feature (Finance attaching a receipt during Needs Clarification, vs. a full
+request-creation flow) will actually call it — both would need the same plumbing underneath, so
+this doesn't lock in that decision yet.
+
+- `uploadReceipt` / `getReceiptDownloadUrl` via `@aws-sdk/client-s3` +
+  `@aws-sdk/s3-request-presigner`, pointed at R2's S3-compatible endpoint — matches ADR 0002's
+  `oc` (Oceania) location hint decision. Receipts are not public; viewing uses a short-lived
+  signed URL.
+- `assertValidReceiptFile` (size/content-type sanity: 10MB max, PDF/JPEG/PNG/HEIC only) and
+  `buildReceiptStorageKey` kept pure/directly-testable, separate from the actual R2 calls — same
+  split used in `notifications.ts`. Virus/malware scanning remains a genuinely open question
+  (spec 0002), not addressed here.
+- Added `R2_ACCOUNT_ID` / `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` / `R2_BUCKET_NAME` to
+  `platform/.env.example`.
+- Verified: `tsc --noEmit` clean, `node --test` 15/15 passing (6 new), `next lint` clean, `next
+  build` succeeds with no R2 env vars set (this module isn't imported/wired into any route yet,
+  so it's inert until a caller exists).
+- **Not yet verified against a real R2 bucket** — Cloudflare R2 access/API token creation was
+  still in progress with the decision-maker at time of writing. Live verification (an actual
+  upload + signed-URL fetch round-trip) is a follow-up once credentials exist.
 
 ## Open items
 None currently tracked as blocking.
