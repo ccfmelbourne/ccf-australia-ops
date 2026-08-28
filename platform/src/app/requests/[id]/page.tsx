@@ -10,7 +10,7 @@ export default async function DraftRequestPage(props: PageProps<"/requests/[id]"
   const { id } = await props.params;
   const userId = await getCurrentUserId();
   if (!userId) {
-    redirect("/requester-login");
+    redirect("/sign-in");
   }
 
   const request = await getDraftRequest(id, userId);

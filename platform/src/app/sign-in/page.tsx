@@ -5,7 +5,7 @@ import { signOutAction } from "./actions";
 
 export const dynamic = "force-dynamic";
 
-export default async function RequesterLoginPage() {
+export default async function SignInPage() {
   const userId = await getCurrentUserId();
   const user = userId ? await prisma.user.findUnique({ where: { id: userId } }) : null;
 

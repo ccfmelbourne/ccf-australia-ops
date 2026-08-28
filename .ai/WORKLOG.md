@@ -197,7 +197,7 @@ HMAC-signed cookie session pattern rather than adopting a third-party session li
 - `platform/src/app/api/auth/google/route.ts` + `callback/route.ts`: the OAuth redirect +
   callback, resolving/creating the matching `User` row by email (same pattern as
   `getOrCreateAccountantUser` in `finance/actions.ts`), backfilling `googleSub`/`picture`.
-- `platform/src/app/requester-login/page.tsx`: separate "Sign in with Google" entry point, not
+- `platform/src/app/sign-in/page.tsx`: separate "Sign in with Google" entry point, not
   merged into the existing Finance-only `/login` page.
 - Schema: added nullable+unique `googleSub` and nullable `picture` to `User`. Applied via a
   manually-authored migration (`prisma migrate dev` refuses non-interactive shells in this
@@ -208,7 +208,7 @@ HMAC-signed cookie session pattern rather than adopting a third-party session li
   `APP_SESSION_SECRET` to `platform/.env.example`.
 - Verified: `tsc --noEmit` clean, `node --test` 17/17 passing (2 new), `next lint` clean, `next
   build` succeeds with no Google/session env vars set (`/api/auth/google` and its callback both
-  register as dynamic routes, `/requester-login` as static — none touched at build time).
+  register as dynamic routes, `/sign-in` as static — none touched at build time).
 - **Update (2026-08-28, later same day):** Google Cloud OAuth client provisioned (External
   audience, Testing mode, since requesters/approvers use personal Gmail rather than a CCF
   Workspace domain). Live-verified with a real sign-in: `User` row created with `googleSub`/
@@ -216,7 +216,7 @@ HMAC-signed cookie session pattern rather than adopting a third-party session li
 - **Bug found and fixed during live verification:** the callback originally redirected to `/`,
   which unconditionally redirects to Finance's own unrelated login — since no requester-facing
   page exists yet, this made a successful Google sign-in look like it had failed. Fixed to
-  redirect back to `/requester-login`, which now shows a signed-in state (name/email + sign out)
+  redirect back to `/sign-in`, which now shows a signed-in state (name/email + sign out)
   instead of just the sign-in button once a session exists. Re-verified: signed-out shows the
   sign-in button, a valid session shows the correct signed-in account, sign-out clears it
   correctly back to signed-out.
@@ -269,6 +269,10 @@ slices per the roadmap).
   (correct running total) → remove one (total correctly recomputed) → confirmed against the
   database directly. `tsc --noEmit`, `next lint`, `node --test` (19/19 passing, 2 new in
   `request-types.test.ts`) all clean, `next build` succeeds.
+- **Renamed `/requester-login` to `/sign-in`** (2026-08-28, later same day): the page was named
+  for the requester side while it was still scoped narrowly, but the same Google sign-in serves
+  approvers too (they'll sign in through this exact page once slice 8 adds approver-facing UI),
+  so "requester-login" was already inaccurate, not something that would only become wrong later.
 
 ## Open items
 None currently tracked as blocking.

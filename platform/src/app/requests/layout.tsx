@@ -1,13 +1,13 @@
 import { redirect } from "next/navigation";
 import { getCurrentUserId } from "@/lib/user-session";
-import { signOutAction } from "@/app/requester-login/actions";
+import { signOutAction } from "@/app/sign-in/actions";
 
 export const dynamic = "force-dynamic";
 
 export default async function RequestsLayout({ children }: { children: React.ReactNode }) {
   const userId = await getCurrentUserId();
   if (!userId) {
-    redirect("/requester-login");
+    redirect("/sign-in");
   }
 
   return (

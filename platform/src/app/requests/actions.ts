@@ -17,7 +17,7 @@ export async function createDraftRequestAction(
 ): Promise<{ error: string | null }> {
   const userId = await getCurrentUserId();
   if (!userId) {
-    redirect("/requester-login");
+    redirect("/sign-in");
   }
 
   const parsed = createDraftSchema.safeParse({
