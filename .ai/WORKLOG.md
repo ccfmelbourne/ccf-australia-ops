@@ -101,14 +101,21 @@ Zod / Prisma 7, per ADR 0002).
   decision-maker adding one), merging this branch.
 
 ## Open items
-- TODO: Add an Actions CI workflow once Track B has application code to test on `main`.
-- TODO: Verify CCF's data residency/privacy requirements against Cloudflare R2's actual
-  available region(s) before the storage choice in ADR 0002 is fully locked in. If Australia-only
-  residency is required and R2 can't guarantee it, switch to Amazon S3 in an Australian region.
 - TODO: Validate spec 0002's data model against a real implementation attempt; resolve its open
   questions (role/assignment modeling, multi-group membership, receipt upload constraints).
+  (In review — see PR #4.)
 
 ## Decided
 - Track A pilot's approval logic will not be updated to match the confirmed Regional
   Director/COS-override rule — the pilot stays as-is (Oceana-only rule) for the remainder of
   its test window. Focus going forward is on Track B.
+- Added an Actions CI workflow for `platform/` (type-check, lint, test, build) once Track B had
+  application code on `main` to test — see PR #3. Along the way, fixed the Vercel project's
+  Root Directory (stale `mvp/reimbursement-voucher` path from the old pilot), Framework Preset
+  (was "Other", now Next.js), and added a `postinstall: prisma generate` script so both CI and
+  Vercel generate the Prisma client automatically.
+- Cloudflare R2's data residency question (ADR 0002) is resolved: confirmed with the
+  decision-maker that CCF's requirement is a latency/locality preference, not a hard compliance
+  guarantee, so R2 with the `oc` (Oceania) location hint stands as the storage choice. Amazon S3
+  in `ap-southeast-2` remains the fallback if that ever changes — see ADR 0002's "Data residency"
+  note for the technical reasoning.

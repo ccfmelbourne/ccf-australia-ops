@@ -56,11 +56,14 @@ to Vercel-specific services, so it can migrate to AWS or another provider later 
 security, compliance, or integration requirements ever justify it — but no migration work
 happens until there's a demonstrated requirement, not preemptively.
 
-**Receipt/document storage: Cloudflare R2 (S3-compatible), with Amazon S3 as the named
-fallback.** Vercel Blob was considered and is technically viable, but was not chosen — the
-priority is storage portability and a clean path toward AWS if the platform ever migrates,
-which an S3-compatible API gives for free. R2 was preferred over S3 itself for V1 on cost/egress
-grounds while staying API-compatible with the AWS fallback.
+**Receipt/document storage: Cloudflare R2 (S3-compatible), using the `oc` (Oceania) location
+hint, with Amazon S3 as the named fallback.** Vercel Blob was considered and is technically
+viable, but was not chosen — the priority is storage portability and a clean path toward AWS if
+the platform ever migrates, which an S3-compatible API gives for free. R2 was preferred over S3
+itself for V1 on cost/egress grounds while staying API-compatible with the AWS fallback.
+Confirmed directly with the project's decision-maker (2026-08-28) that CCF's data residency
+need here is a latency/locality preference, not a hard compliance guarantee — see "Data
+residency" below for the technical reasoning that decision rests on.
 
 ```text
 V1 (now)                              Future (if migration is ever justified)
@@ -94,25 +97,29 @@ now, even while V1 runs entirely on Vercel.
 - A monolith can accumulate unclear boundaries over time if module discipline isn't maintained — mitigated by keeping modules scoped to bounded contexts (per DDD) and reviewing new modules against that boundary in PRs, not by tooling alone.
 - Next.js, Prisma, and PostgreSQL together imply real hosting infrastructure (a managed Postgres instance, a Next.js hosting target) — a meaningfully bigger operational footprint than the Track A pilot's zero-infrastructure static-HTML approach, which was an intentional trade-off for that temporary pilot and is not a precedent this ADR follows.
 
-## Open questions
-- **Confirm CCF's actual data residency/privacy requirement, then apply the technical finding
-  below.** R2 offers two distinct mechanisms, and only one is an enforceable guarantee:
-  - *Location Hints* (`wnam`, `enam`, `weur`, `eeur`, `apac`, `oc` for Oceania) are, in
-    Cloudflare's own words, "best effort and not a guarantee" of where an object is actually
-    stored.
-  - *Jurisdictional Restrictions*, which do guarantee storage stays within a jurisdiction, are
-    only available for `eu`, `fedramp`, and `us` — **there is no Australia or APAC jurisdictional
-    restriction**, and the jurisdiction can't be changed after a bucket is created.
-  - So: if CCF's requirement is a genuine guarantee that receipts/documents never leave
-    Australia (e.g. under the Privacy Act or a funder/board policy), **R2 cannot meet that today**
-    — switch the storage choice to Amazon S3 in `ap-southeast-2` (Sydney), which does offer a
-    real region-locked bucket. If the requirement is softer (a preference for low-latency
-    APAC storage, not a compliance guarantee), R2's `oc` location hint is sufficient and the
-    storage choice above stands as-is. This requirement itself has not been confirmed with the
-    decision-maker — that confirmation, not further technical research, is what's left.
+**Data residency (resolved 2026-08-28)** — R2 offers two distinct data-placement mechanisms, and
+only one is an enforceable guarantee:
+- *Location Hints* (`wnam`, `enam`, `weur`, `eeur`, `apac`, `oc` for Oceania) are, in
+  Cloudflare's own words, "best effort and not a guarantee" of where an object is actually
+  stored.
+- *Jurisdictional Restrictions*, which do guarantee storage stays within a jurisdiction, are
+  only available for `eu`, `fedramp`, and `us` — there is no Australia or APAC jurisdictional
+  restriction, and the jurisdiction can't be changed after a bucket is created.
 
-    (Sources: [Cloudflare R2 data location docs](https://developers.cloudflare.com/r2/reference/data-location/),
-    [R2 Data Localization Suite docs](https://developers.cloudflare.com/data-localization/how-to/r2/).)
+The project's decision-maker confirmed CCF's actual need here is a latency/locality preference,
+not a hard compliance guarantee (no Privacy Act, funder, or board policy mandates an enforced
+Australia-only guarantee for this data). That makes R2's `oc` location hint sufficient, so the
+storage choice above stands. If that changes later, the fallback is Amazon S3 in `ap-southeast-2`
+(Sydney), which does offer a real region-locked bucket — R2's S3-compatible API means the
+application code wouldn't need to change, only the storage backend and a data migration of
+existing objects.
+
+(Sources: [Cloudflare R2 data location docs](https://developers.cloudflare.com/r2/reference/data-location/),
+[R2 Data Localization Suite docs](https://developers.cloudflare.com/data-localization/how-to/r2/).)
+
+## Open questions
+None currently open — the one prior open question (data residency, above) was resolved with the
+decision-maker on 2026-08-28.
 
 ## Related
 - `.ai/PROJECT.md` — charter principles this ADR makes concrete.
