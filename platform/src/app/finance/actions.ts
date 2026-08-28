@@ -13,6 +13,7 @@ import {
 } from "@/lib/finance-auth";
 import { transitionRequestStatus } from "@/lib/finance-data";
 import type { FinanceStatus } from "@/lib/status-transitions";
+import { sendStatusChangeEmail } from "@/lib/notifications";
 
 const loginSchema = z.object({
   password: z.string().min(1, "Password is required"),
@@ -59,7 +60,15 @@ export async function updateRequestStatusAction(
   }
   try {
     const accountant = await getOrCreateAccountantUser();
-    await transitionRequestStatus(requestId, toStatus, accountant.id);
+    const notification = await transitionRequestStatus(requestId, toStatus, accountant.id);
+    try {
+      await sendStatusChangeEmail({ ...notification, toStatus });
+    } catch (emailErr) {
+      // Email is a notification channel only (ADR 0001) — a delivery
+      // failure must not undo or block the status transition it's
+      // reporting on.
+      console.error("Failed to send status change email:", emailErr);
+    }
     return { ok: true };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : "Something went wrong." };

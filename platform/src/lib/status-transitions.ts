@@ -27,6 +27,16 @@ const ALLOWED_TRANSITIONS: Record<FinanceStatus, readonly FinanceStatus[]> = {
   REJECTED_RETURNED: [],
 };
 
+// Shared with StatusBadge (display) and the status-change email (notifications.ts) so both
+// surfaces describe a status the same way.
+export const FINANCE_STATUS_LABELS: Record<FinanceStatus, string> = {
+  READY_FOR_PROCESSING: "Ready for Processing",
+  NEEDS_CLARIFICATION: "Needs Clarification",
+  PROCESSING: "Processing",
+  PROCESSED: "Processed",
+  REJECTED_RETURNED: "Rejected / Returned",
+};
+
 export function getAllowedNextStatuses(current: FinanceStatus): readonly FinanceStatus[] {
   return ALLOWED_TRANSITIONS[current];
 }

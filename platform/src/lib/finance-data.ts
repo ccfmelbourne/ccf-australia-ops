@@ -84,11 +84,18 @@ export async function getRequestDetail(id: string): Promise<RequestDetailView | 
   };
 }
 
+export interface StatusTransitionResult {
+  requesterEmail: string;
+  requesterName: string;
+  voucherNo: string;
+  totalAmount: string; // formatted, e.g. "245.80"
+}
+
 export async function transitionRequestStatus(
   requestId: string,
   toStatus: FinanceStatus,
   actorUserId: string,
-): Promise<void> {
+): Promise<StatusTransitionResult> {
   const current = await prisma.reimbursementRequest.findUniqueOrThrow({
     where: { id: requestId },
     select: { status: true },
@@ -98,10 +105,11 @@ export async function transitionRequestStatus(
   // is safe to call directly, e.g. from a future API route or test.
   assertValidTransition(current.status as FinanceStatus, toStatus);
 
-  await prisma.$transaction([
+  const [updated] = await prisma.$transaction([
     prisma.reimbursementRequest.update({
       where: { id: requestId },
       data: { status: toStatus },
+      include: { requester: true },
     }),
     prisma.auditLogEntry.create({
       data: {
@@ -112,4 +120,11 @@ export async function transitionRequestStatus(
       },
     }),
   ]);
+
+  return {
+    requesterEmail: updated.requester.email,
+    requesterName: updated.requester.name,
+    voucherNo: updated.voucherNo,
+    totalAmount: formatAmount(updated.totalAmount),
+  };
 }
