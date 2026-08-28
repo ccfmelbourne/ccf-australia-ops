@@ -1,3 +1,4 @@
+import Link from "next/link";
 import type { FinanceStatus, RequestDetailView as RequestDetailViewType } from "@/types/finance";
 import { StatusBadge } from "./StatusBadge";
 import { ApprovalHistoryList } from "./ApprovalHistoryList";
@@ -8,10 +9,23 @@ export function RequestDetailView({
   onTransition,
 }: {
   request: RequestDetailViewType;
-  onTransition: (requestId: string, toStatus: FinanceStatus) => Promise<{ ok: boolean; error?: string }>;
+  onTransition: (
+    requestId: string,
+    toStatus: FinanceStatus,
+  ) => Promise<{ ok: boolean; error?: string; emailWarning?: string }>;
 }) {
   return (
     <div className="flex flex-col gap-6">
+      {/* A Next.js Link, styled as a button — keeps real <a> navigation
+          semantics (prefetching, open-in-new-tab, no-JS fallback) while
+          looking like the rest of the UI's buttons. */}
+      <Link
+        href="/finance"
+        className="inline-flex w-fit items-center gap-1 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
+      >
+        ← Back to queue
+      </Link>
+
       <div className="flex items-start justify-between">
         <div>
           <h1 className="font-mono text-2xl font-bold text-slate-900">{request.voucherNo}</h1>

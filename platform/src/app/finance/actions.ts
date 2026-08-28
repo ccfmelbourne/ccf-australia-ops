@@ -53,7 +53,7 @@ async function getOrCreateAccountantUser() {
 export async function updateRequestStatusAction(
   requestId: string,
   toStatus: FinanceStatus,
-): Promise<{ ok: boolean; error?: string }> {
+): Promise<{ ok: boolean; error?: string; emailWarning?: string }> {
   const authed = await isFinanceAuthenticated();
   if (!authed) {
     return { ok: false, error: "Not signed in." };
@@ -61,15 +61,18 @@ export async function updateRequestStatusAction(
   try {
     const accountant = await getOrCreateAccountantUser();
     const notification = await transitionRequestStatus(requestId, toStatus, accountant.id);
+    let emailWarning: string | undefined;
     try {
       await sendStatusChangeEmail({ ...notification, toStatus });
     } catch (emailErr) {
       // Email is a notification channel only (ADR 0001) — a delivery
       // failure must not undo or block the status transition it's
-      // reporting on.
+      // reporting on. Still logged server-side for ops visibility, and
+      // surfaced to Finance as a toast so it isn't silently swallowed.
       console.error("Failed to send status change email:", emailErr);
+      emailWarning = "Status updated, but the notification email failed to send.";
     }
-    return { ok: true };
+    return { ok: true, emailWarning };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : "Something went wrong." };
   }
