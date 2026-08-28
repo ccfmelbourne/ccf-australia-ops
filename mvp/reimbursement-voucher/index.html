@@ -1,0 +1,547 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CCF Australia Melbourne — Disbursement Voucher</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --teal: #00A8B4;
+    --teal-dark: #007d88;
+    --teal-light: #e0f7f9;
+    --teal-mid: #00919b;
+    --amber-light: #fffbeb;
+    --red: #dc2626;
+    --dark: #1a1f2e;
+    --gray-1: #f8fafc;
+    --gray-2: #f1f5f9;
+    --gray-3: #e2e8f0;
+    --gray-4: #94a3b8;
+    --gray-5: #64748b;
+    --success: #10b981;
+    --shadow-lg: 0 20px 48px rgba(0,0,0,0.12), 0 8px 20px rgba(0,0,0,0.06);
+    --radius: 10px;
+    --radius-sm: 6px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'DM Sans', sans-serif;
+    background: linear-gradient(135deg, #e8f9fa 0%, #f0fafb 40%, #eef6f7 100%);
+    min-height: 100vh;
+    padding: 32px 16px 60px;
+    color: var(--dark);
+  }
+  body::before {
+    content: '';
+    position: fixed;
+    top: -200px; right: -200px;
+    width: 600px; height: 600px;
+    background: radial-gradient(circle, rgba(0,168,180,0.08) 0%, transparent 70%);
+    pointer-events: none;
+  }
+  .form-wrapper { max-width: 860px; margin: 0 auto; }
+
+  /* HEADER */
+  .header {
+    background: linear-gradient(135deg, var(--teal) 0%, var(--teal-dark) 100%);
+    border-radius: 16px 16px 0 0;
+    padding: 28px 36px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 20px;
+    box-shadow: 0 4px 20px rgba(0,168,180,0.3);
+  }
+  .header-left { display: flex; align-items: center; gap: 18px; }
+  .logo-wrap {
+    background: white; border-radius: 12px; padding: 8px 10px;
+    display: flex; align-items: center;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.12); flex-shrink: 0;
+  }
+  .logo-svg { width: 80px; height: 44px; }
+  .header-title h1 { font-size: 22px; font-weight: 700; color: white; letter-spacing: -0.3px; line-height: 1.2; }
+  .header-title p { font-size: 12px; color: rgba(255,255,255,0.75); font-weight: 400; letter-spacing: 1.5px; text-transform: uppercase; margin-top: 3px; }
+  .header-meta { display: flex; flex-direction: column; gap: 10px; flex-shrink: 0; }
+  .meta-field { display: flex; flex-direction: column; gap: 3px; }
+  .meta-field label { font-size: 9px; font-weight: 600; letter-spacing: 1.5px; text-transform: uppercase; color: rgba(255,255,255,0.65); }
+  .meta-field input {
+    background: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.3);
+    border-radius: var(--radius-sm); padding: 6px 10px;
+    font-family: 'DM Mono', monospace; font-size: 13px; color: white; width: 170px;
+    transition: background 0.2s, border 0.2s;
+  }
+  .meta-field input::placeholder { color: rgba(255,255,255,0.4); }
+  .meta-field input:focus { outline: none; background: rgba(255,255,255,0.22); border-color: rgba(255,255,255,0.6); }
+
+  /* BODY */
+  .form-body { background: white; border-radius: 0 0 16px 16px; box-shadow: var(--shadow-lg); overflow: hidden; }
+  .form-section { padding: 24px 36px; border-bottom: 1px solid var(--gray-3); }
+  .form-section:last-child { border-bottom: none; }
+  .section-title {
+    font-size: 10px; font-weight: 700; letter-spacing: 1.8px; text-transform: uppercase;
+    color: var(--teal-mid); margin-bottom: 14px; display: flex; align-items: center; gap: 8px;
+  }
+  .section-title::after { content: ''; flex: 1; height: 1px; background: var(--gray-3); }
+
+  .row-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
+  .row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  .field-group { display: flex; flex-direction: column; gap: 5px; }
+  .field-group label { font-size: 11px; font-weight: 600; color: var(--gray-5); letter-spacing: 0.3px; }
+  .field-group input, .field-group select, .field-group textarea {
+    font-family: 'DM Sans', sans-serif; font-size: 14px; color: var(--dark);
+    background: var(--gray-1); border: 1.5px solid var(--gray-3);
+    border-radius: var(--radius-sm); padding: 9px 12px;
+    transition: border-color 0.2s, background 0.2s, box-shadow 0.2s; width: 100%;
+  }
+  .field-group input:focus, .field-group select:focus, .field-group textarea:focus {
+    outline: none; border-color: var(--teal); background: white;
+    box-shadow: 0 0 0 3px rgba(0,168,180,0.1);
+  }
+  .field-group select {
+    cursor: pointer; appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%2394a3b8' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+    background-repeat: no-repeat; background-position: right 12px center; padding-right: 32px;
+  }
+
+  /* NOTICE */
+  .notice-banner {
+    background: var(--amber-light); border: 1px solid #fde68a;
+    border-radius: var(--radius-sm); padding: 10px 14px;
+    font-size: 12px; color: #92400e; font-weight: 500;
+    display: flex; align-items: center; gap: 8px;
+  }
+
+  /* LINE ITEMS */
+  .table-header {
+    display: grid; grid-template-columns: 32px 1fr 140px;
+    background: var(--teal); border-radius: var(--radius-sm) var(--radius-sm) 0 0; padding: 10px 12px;
+  }
+  .table-header span { font-size: 11px; font-weight: 700; color: white; letter-spacing: 1px; text-transform: uppercase; }
+  .table-header span:last-child { text-align: right; }
+  .line-items { border: 1.5px solid var(--gray-3); border-top: none; border-radius: 0 0 var(--radius-sm) var(--radius-sm); overflow: hidden; }
+  .line-row {
+    display: grid; grid-template-columns: 32px 1fr 140px;
+    align-items: center; border-bottom: 1px solid var(--gray-3); transition: background 0.15s;
+  }
+  .line-row:last-child { border-bottom: none; }
+  .line-row:nth-child(even) { background: var(--gray-1); }
+  .line-row:hover { background: var(--teal-light); }
+  .line-num { font-family: 'DM Mono', monospace; font-size: 11px; color: var(--gray-4); text-align: center; padding: 0 4px; user-select: none; }
+  .line-row input { border: none; background: transparent; padding: 10px; font-family: 'DM Sans', sans-serif; font-size: 13.5px; color: var(--dark); width: 100%; }
+  .line-row input:focus { outline: none; background: rgba(0,168,180,0.04); }
+  .line-row .amount-input { font-family: 'DM Mono', monospace; font-size: 13px; text-align: right; padding-right: 14px; border-left: 1px solid var(--gray-3); }
+  .total-row {
+    display: grid; grid-template-columns: 1fr 140px;
+    background: var(--teal-light); border: 1.5px solid var(--teal);
+    border-radius: var(--radius-sm); margin-top: 8px; overflow: hidden;
+  }
+  .total-label { padding: 12px 16px; font-size: 13px; font-weight: 700; color: var(--teal-dark); text-align: right; }
+  .total-amount { font-family: 'DM Mono', monospace; font-size: 15px; font-weight: 700; color: var(--teal-dark); padding: 12px 14px; text-align: right; border-left: 1.5px solid var(--teal); background: rgba(0,168,180,0.08); }
+
+  /* APPROVAL */
+  .approval-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; }
+  .approver-card {
+    background: var(--gray-1); border: 1.5px solid var(--gray-3);
+    border-radius: var(--radius-sm); padding: 12px 10px;
+    display: flex; flex-direction: column; gap: 8px;
+    transition: border-color 0.2s, box-shadow 0.2s;
+  }
+  .approver-title { font-size: 9px; font-weight: 700; color: var(--teal-mid); letter-spacing: 1px; text-transform: uppercase; text-align: center; line-height: 1.4; }
+  .approver-name { font-size: 11px; color: var(--gray-5); text-align: center; font-style: italic; line-height: 1.3; }
+  .sig-area { border-top: 1.5px solid var(--gray-3); padding-top: 6px; display: flex; flex-direction: column; gap: 4px; }
+  .sig-area input { border: none; border-bottom: 1px dashed var(--gray-3); background: transparent; font-family: 'DM Sans', sans-serif; font-size: 11px; color: var(--dark); padding: 3px 4px; width: 100%; text-align: center; }
+  .sig-area input:focus { outline: none; border-bottom-color: var(--teal); }
+  .sig-area input:disabled { color: var(--gray-4); font-style: italic; }
+  .sig-area label { font-size: 9px; color: var(--gray-4); text-align: center; }
+
+  /* LIMITS */
+  .limits-box { background: var(--gray-1); border: 1.5px solid var(--gray-3); border-radius: var(--radius-sm); padding: 16px 20px; }
+  .limits-box h4 { font-size: 10px; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase; color: var(--teal-mid); margin-bottom: 10px; }
+  .limits-list { display: flex; flex-direction: column; gap: 6px; }
+  .limit-item { display: flex; align-items: baseline; gap: 10px; font-size: 12.5px; }
+  .limit-range { font-family: 'DM Mono', monospace; font-weight: 600; color: var(--teal-dark); font-size: 12px; white-space: nowrap; min-width: 140px; }
+  .limit-warn { margin-top: 10px; font-size: 11px; font-weight: 600; color: var(--red); display: flex; align-items: center; gap: 5px; }
+
+  /* MINISTRY TABLE */
+  .ministry-table { width: 100%; border-collapse: collapse; border-radius: var(--radius-sm); overflow: hidden; border: 1.5px solid var(--gray-3); font-size: 12px; }
+  .ministry-table thead tr:first-child th { background: var(--teal); color: white; font-size: 10px; font-weight: 700; letter-spacing: 0.8px; text-transform: uppercase; padding: 9px 10px; border-right: 1px solid rgba(255,255,255,0.2); text-align: center; }
+  .ministry-table thead tr:first-child th:first-child { text-align: left; }
+  .ministry-table thead tr:last-child th { background: var(--teal-mid); color: white; font-size: 10px; font-weight: 700; padding: 7px 10px; border-right: 1px solid rgba(255,255,255,0.2); text-align: center; }
+  .ministry-table td { padding: 9px 10px; border-right: 1px solid var(--gray-3); border-bottom: 1px solid var(--gray-3); text-align: center; vertical-align: top; line-height: 1.5; color: var(--dark); }
+  .ministry-table td:first-child { font-weight: 700; color: var(--teal-mid); font-size: 11px; letter-spacing: 0.5px; text-transform: uppercase; }
+  .ministry-table tbody tr:nth-child(even) td { background: var(--gray-1); }
+
+  /* SUBMIT */
+  .submit-section { padding: 24px 36px; background: var(--gray-1); display: flex; align-items: center; justify-content: space-between; gap: 16px; border-top: 2px solid var(--teal-light); }
+  .submit-note { font-size: 12px; color: var(--gray-5); max-width: 400px; line-height: 1.5; }
+  .btn-group { display: flex; gap: 10px; }
+  .btn { font-family: 'DM Sans', sans-serif; font-size: 14px; font-weight: 600; padding: 11px 24px; border-radius: var(--radius-sm); border: none; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; gap: 7px; white-space: nowrap; }
+  .btn-outline { background: white; border: 1.5px solid var(--gray-3); color: var(--gray-5); }
+  .btn-outline:hover { border-color: var(--teal); color: var(--teal); }
+  .btn-primary { background: linear-gradient(135deg, var(--teal) 0%, var(--teal-dark) 100%); color: white; box-shadow: 0 4px 14px rgba(0,168,180,0.35); }
+  .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 6px 20px rgba(0,168,180,0.45); }
+  .btn-primary:active { transform: translateY(0); }
+  .btn-primary:disabled { opacity: 0.7; cursor: not-allowed; transform: none; }
+
+  /* TOAST */
+  .toast { display: none; position: fixed; bottom: 32px; right: 32px; color: white; padding: 14px 20px; border-radius: var(--radius); font-size: 14px; font-weight: 500; box-shadow: var(--shadow-lg); align-items: center; gap: 10px; z-index: 300; }
+  .toast.show { display: flex; }
+
+  /* MODAL */
+  .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(15,20,30,0.6); backdrop-filter: blur(4px); z-index: 200; align-items: center; justify-content: center; padding: 20px; }
+  .modal-overlay.show { display: flex; }
+  .modal { background: white; border-radius: 16px; width: 100%; max-width: 580px; max-height: 90vh; overflow-y: auto; box-shadow: 0 32px 80px rgba(0,0,0,0.25); animation: slideUp2 0.25s ease; }
+  @keyframes slideUp2 { from { transform: translateY(24px); opacity:0 } to { transform: translateY(0); opacity:1 } }
+  .modal-header { background: linear-gradient(135deg, var(--teal), var(--teal-dark)); padding: 22px 28px; border-radius: 16px 16px 0 0; display: flex; align-items: center; gap: 14px; }
+  .modal-header-icon { width: 44px; height: 44px; background: rgba(255,255,255,0.2); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 22px; flex-shrink: 0; }
+  .modal-header h2 { color: white; font-size: 18px; font-weight: 700; }
+  .modal-header p { color: rgba(255,255,255,0.75); font-size: 12px; margin-top: 2px; }
+  .modal-body { padding: 24px 28px; display: flex; flex-direction: column; gap: 20px; }
+  .summary-group-title { font-size: 9px; font-weight: 700; letter-spacing: 1.8px; text-transform: uppercase; color: var(--teal-mid); margin-bottom: 10px; padding-bottom: 6px; border-bottom: 1px solid var(--gray-3); }
+  .summary-rows { display: flex; flex-direction: column; gap: 7px; }
+  .summary-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; font-size: 13px; }
+  .s-label { color: var(--gray-5); font-size: 12px; flex-shrink: 0; }
+  .s-value { color: var(--dark); font-weight: 500; text-align: right; }
+  .s-value.mono { font-family: 'DM Mono', monospace; }
+  .s-value.badge { background: var(--teal-light); color: var(--teal-dark); font-weight: 600; font-size: 11px; padding: 3px 10px; border-radius: 20px; border: 1px solid var(--teal); }
+  .s-value.tier-badge { background: var(--amber-light); color: #92400e; font-weight: 600; font-size: 11px; padding: 3px 10px; border-radius: 20px; border: 1px solid #fde68a; }
+  .summary-items-table { width: 100%; border-collapse: collapse; font-size: 12.5px; border-radius: var(--radius-sm); overflow: hidden; border: 1px solid var(--gray-3); }
+  .summary-items-table th { background: var(--gray-2); padding: 7px 10px; font-size: 10px; font-weight: 700; letter-spacing: 0.8px; text-transform: uppercase; color: var(--gray-5); border-bottom: 1px solid var(--gray-3); }
+  .summary-items-table th:first-child { text-align: left; }
+  .summary-items-table th:last-child { text-align: right; }
+  .summary-items-table td { padding: 8px 10px; border-bottom: 1px solid var(--gray-3); color: var(--dark); }
+  .summary-items-table td:last-child { text-align: right; font-family: 'DM Mono', monospace; font-size: 12px; }
+  .summary-items-table tr:last-child td { border-bottom: none; }
+  .summary-items-table tr:nth-child(even) td { background: var(--gray-1); }
+  .summary-total-row { display: flex; justify-content: space-between; align-items: center; background: var(--teal-light); border: 1.5px solid var(--teal); border-radius: var(--radius-sm); padding: 10px 14px; margin-top: 8px; }
+  .summary-total-row span:first-child { font-weight: 700; font-size: 13px; color: var(--teal-dark); }
+  .summary-total-row span:last-child { font-family: 'DM Mono', monospace; font-weight: 700; font-size: 16px; color: var(--teal-dark); }
+  .approver-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+  .approver-chip { background: var(--teal-light); border: 1px solid var(--teal); color: var(--teal-dark); font-size: 11px; font-weight: 600; padding: 4px 10px; border-radius: 20px; }
+  .modal-footer { padding: 16px 28px 24px; display: flex; gap: 10px; justify-content: flex-end; border-top: 1px solid var(--gray-3); }
+
+  .dl-opt {
+    display: block; width: 100%; padding: 9px 14px; background: none;
+    border: none; border-bottom: 1px solid var(--gray-3); text-align: left;
+    font-family: 'DM Sans', sans-serif; font-size: 13px; font-weight: 500;
+    color: var(--dark); cursor: pointer; transition: background 0.15s;
+  }
+  .dl-opt:last-child { border-bottom: none; }
+  .dl-opt:hover { background: var(--teal-light); color: var(--teal-dark); }
+
+  /* PRINT */
+  @media print {
+    body { background: white; padding: 0; }
+    .submit-section, .modal-overlay, .toast { display: none !important; }
+    .form-body { box-shadow: none; border-radius: 0; }
+    .header { border-radius: 0; }
+    .field-group input, .field-group select { border: 1px solid #ccc; background: white; }
+  }
+
+  /* MOBILE */
+  @media (max-width: 640px) {
+    .row-3 { grid-template-columns: 1fr; }
+    .row-2 { grid-template-columns: 1fr; }
+    .approval-grid { grid-template-columns: repeat(2, 1fr); }
+    .header { flex-direction: column; align-items: flex-start; }
+    .meta-field input { width: 100%; }
+    .form-section { padding: 18px 20px; }
+    .submit-section { flex-direction: column; align-items: flex-start; }
+    .table-header, .line-row { grid-template-columns: 28px 1fr 110px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="form-wrapper">
+
+  <!-- HEADER -->
+  <div class="header">
+    <div class="header-left">
+      <div class="logo-wrap">
+        <svg class="logo-svg" viewBox="0 0 110 60" xmlns="http://www.w3.org/2000/svg">
+          <circle cx="30" cy="30" r="26" fill="none" stroke="#00A8B4" stroke-width="2.5"/>
+          <text x="30" y="36" font-family="Arial,sans-serif" font-weight="900" font-size="16" fill="#00A8B4" text-anchor="middle" letter-spacing="1">ccf</text>
+          <text x="62" y="19" font-family="Arial,sans-serif" font-weight="700" font-size="7.5" fill="#00A8B4" letter-spacing="0.5">CHRIST'S</text>
+          <text x="62" y="29" font-family="Arial,sans-serif" font-weight="700" font-size="7.5" fill="#00A8B4" letter-spacing="0.5">COMMISSION</text>
+          <text x="62" y="39" font-family="Arial,sans-serif" font-weight="700" font-size="7.5" fill="#00A8B4" letter-spacing="0.5">FELLOWSHIP</text>
+          <text x="62" y="49" font-family="Arial,sans-serif" font-weight="700" font-size="7.5" fill="#00A8B4" letter-spacing="0.5">AUSTRALIA</text>
+        </svg>
+      </div>
+      <div class="header-title">
+        <h1>CCF Australia</h1>
+        <p>Melbourne · Disbursement Voucher</p>
+      </div>
+    </div>
+    <div class="header-meta">
+      <div class="meta-field">
+        <label>Voucher No.</label>
+        <input type="text" id="voucherNo" placeholder="e.g. DV-2026-001">
+      </div>
+      <div class="meta-field">
+        <label>Date</label>
+        <input type="date" id="voucherDate">
+      </div>
+    </div>
+  </div>
+
+  <div class="form-body">
+
+    <!-- REQUEST DETAILS -->
+    <div class="form-section">
+      <div class="section-title">Request Details</div>
+      <div class="row-3">
+        <div class="field-group">
+          <label>Request Type</label>
+          <select id="requestType">
+            <option value="">Select...</option>
+            <option>Cash Advance</option>
+            <option>Reimbursement</option>
+            <option>Liquidation of Cash Advance</option>
+            <option>Benevolence</option>
+            <option>Payment to Supplier</option>
+            <option>State/International Transfer</option>
+          </select>
+        </div>
+        <div class="field-group">
+          <label>Ministry Type</label>
+          <select id="area" onchange="updateApprovers()">
+            <option value="">Select...</option>
+            <option>Admin</option>
+            <option>Exalt / Live Prod</option>
+            <option>Finance</option>
+            <option>NxtGen</option>
+            <option>Pastoral Care</option>
+            <option>B1G</option>
+            <option>Elevate</option>
+            <option>Events / Host</option>
+            <option>Comms / Media / DGM</option>
+            <option>Oceana Regional</option>
+          </select>
+        </div>
+        <div class="field-group">
+          <label>Area</label>
+          <select id="ministryType" onchange="updateApprovers()">
+            <option value="">Select...</option>
+            <option value="bendigo">Bendigo</option>
+            <option value="geelong">Geelong</option>
+            <option value="south-east">South East</option>
+            <option value="tottenham">Tottenham</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <!-- NOTICE -->
+    <div class="form-section" style="padding-top:0; padding-bottom:14px; border-bottom:none;">
+      <div class="notice-banner">
+        <span>⚠️</span>
+        <span><strong>NOTE:</strong> One ministry per voucher only. No breaking of total amount for less approval.</span>
+      </div>
+    </div>
+
+    <!-- LINE ITEMS -->
+    <div class="form-section">
+      <div class="section-title">Description / Receipts Attached</div>
+      <div class="table-header">
+        <span>#</span>
+        <span>Description</span>
+        <span style="text-align:right">Amount (AUD)</span>
+      </div>
+      <div class="line-items" id="lineItems"></div>
+      <div class="total-row">
+        <div class="total-label">TOTAL</div>
+        <div class="total-amount" id="totalDisplay">$ 0.00</div>
+      </div>
+    </div>
+
+    <!-- REQUISITIONED BY + BANK -->
+    <div class="form-section">
+      <div class="row-2">
+        <div>
+          <div class="section-title">Requisitioned By</div>
+          <div style="background:var(--gray-1);border:1.5px solid var(--gray-3);border-radius:var(--radius-sm);padding:16px;font-size:12px;color:var(--gray-5);line-height:1.6;margin-bottom:12px;">
+            For Cash Advances (CA), the requisitioner agrees to liquidate the CA, with relevant invoices, <strong>not later than one (1) month</strong> from the date of this voucher.
+          </div>
+          <div class="field-group">
+            <label>Printed Name</label>
+            <input type="text" id="requesterName" placeholder="Full name">
+          </div>
+          <div class="field-group" style="margin-top:10px;">
+            <label>Signature</label>
+            <div style="position:relative;">
+              <canvas id="sigCanvas" width="460" height="100"
+                style="border:1.5px solid var(--gray-3);border-radius:var(--radius-sm);background:var(--gray-1);cursor:crosshair;display:block;width:100%;touch-action:none;"></canvas>
+              <button type="button" onclick="clearSig()"
+                style="position:absolute;top:6px;right:8px;font-family:'DM Sans',sans-serif;font-size:11px;font-weight:600;color:var(--gray-5);background:white;border:1px solid var(--gray-3);border-radius:4px;padding:3px 8px;cursor:pointer;">
+                ✕ Clear
+              </button>
+            </div>
+            <span style="font-size:11px;color:var(--gray-4);margin-top:3px;display:block;">Draw your signature using mouse or touch</span>
+          </div>
+        </div>
+        <div>
+          <div class="section-title">Bank Details for Payment</div>
+          <div style="display:flex;flex-direction:column;gap:10px;">
+            <div class="field-group">
+              <label>Account Name</label>
+              <input type="text" id="accountName" placeholder="Account holder name">
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1.6fr;gap:10px;">
+              <div class="field-group">
+                <label>BSB</label>
+                <input type="text" id="bsb" placeholder="000-000" maxlength="7">
+              </div>
+              <div class="field-group">
+                <label>Account No.</label>
+                <input type="text" id="accountNo" placeholder="Account number">
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- APPROVAL -->
+    <div class="form-section">
+      <div class="section-title">Approval — Notification Routing</div>
+      <div class="notice-banner" style="margin-bottom:14px;background:var(--teal-light);border-color:var(--teal);color:var(--teal-dark);">
+        <span>ℹ️</span>
+        <span id="approvalNoteText">Enter the total amount above to see required approvers.</span>
+      </div>
+      <div class="notice-banner" id="approvalPilotNote" style="margin-bottom:14px;">
+        <span>⚠️</span>
+        <span class="pilot-note-text">Loading pilot note…</span>
+      </div>
+      <div class="approval-grid" id="approvalGrid"></div>
+    </div>
+
+    <!-- APPROVAL LIMITS -->
+    <div class="form-section">
+      <div class="limits-box">
+        <h4>Approval Limits</h4>
+        <div class="limits-list">
+          <div class="limit-item"><span class="limit-range">≤ $500</span><span>1 Ministry Overseer</span></div>
+          <div class="limit-item"><span class="limit-range">&gt; $500 to $2,000</span><span>1 Ministry Overseer + 1 COS</span></div>
+          <div class="limit-item"><span class="limit-range">&gt; $2,000 to $5,000</span><span>2 COS + Finance Overseer</span></div>
+          <div class="limit-item"><span class="limit-range">&gt; $5,000</span><span>2 COS + Finance Overseer (+ Regional Director if Oceana)</span></div>
+        </div>
+        <div class="limit-warn">⛔ No breaking of total amount for less approval.</div>
+      </div>
+    </div>
+
+    <!-- MINISTRY TABLE -->
+    <div class="form-section">
+      <div class="section-title">Ministry COS / Overseer Reference</div>
+      <table class="ministry-table">
+        <thead>
+          <tr>
+            <th style="text-align:left">Role</th>
+            <th>Admin / Exalt / Live Prod</th>
+            <th>Finance / NxtGen / Pastoral Care</th>
+            <th>B1G / Elevate / Events / Host</th>
+            <th>Comms / Media / DGM</th>
+            <th>Oceana Regional Dir.<br><span style="font-weight:400;font-size:9px;opacity:0.85;">(for &gt; $5,000)</span></th>
+          </tr>
+          <tr>
+            <th style="text-align:left">COS / Overseer</th>
+            <th colspan="5"></th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Name</td>
+            <td>Ross Callado</td>
+            <td>Joel Jerez</td>
+            <td>Vamie Pinlac / Robert Cruz / Joshua Mangalong</td>
+            <td>Dexter Santiago / Moriz Manlangit</td>
+            <td>Ptr. Ryan Escobar</td>
+          </tr>
+
+
+        </tbody>
+      </table>
+    </div>
+
+    <!-- SUBMIT -->
+    <div class="submit-section">
+      <p class="submit-note">Review all details before submitting. Ensure receipts are attached and correct approvers are indicated per approval limits above.</p>
+      <div class="btn-group">
+        <button class="btn btn-outline" onclick="clearForm()">🗑 Clear</button>
+        <button class="btn btn-outline" onclick="saveForm()">💾 Save</button>
+        <div style="position:relative;display:inline-block;" id="downloadWrapper">
+          <button class="btn btn-outline" onclick="toggleDownloadMenu(event)">⬇ Download ▾</button>
+          <div id="downloadMenu" style="display:none;position:absolute;bottom:110%;left:0;background:white;border:1.5px solid var(--gray-3);border-radius:var(--radius-sm);box-shadow:0 8px 24px rgba(0,0,0,0.12);min-width:160px;z-index:999;overflow:hidden;">
+            <button onclick="downloadForm('html')"    class="dl-opt">🌐 HTML</button>
+            <button onclick="downloadForm('csv')"     class="dl-opt">📊 CSV</button>
+            <button onclick="downloadForm('excel')"   class="dl-opt">📗 Excel (.xlsx)</button>
+            <button onclick="downloadForm('word')"    class="dl-opt">📘 Word (.doc)</button>
+            <button onclick="downloadForm('pdf')"     class="dl-opt">📄 PDF (Print dialog)</button>
+            <button onclick="downloadForm('pdffile')" class="dl-opt">📥 PDF (Download file)</button>
+          </div>
+        </div>
+        <button class="btn btn-outline" onclick="window.print()">🖨 Print</button>
+        <button class="btn btn-primary" onclick="submitForm()">✓ Submit Voucher</button>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- APPROVER NAMES DATALIST (organizational roles — not personal contact info) -->
+<datalist id="approver-names-list">
+  <option value="Joel Jerez">
+  <option value="Ross Callado">
+  <option value="Vamie Pinlac">
+  <option value="Eland Afuang">
+  <option value="Lawrence Hernando">
+  <option value="Moriz Manlangit">
+  <option value="Robert Cruz">
+  <option value="Dexter Santiago">
+  <option value="Joshua Mangalong">
+  <option value="Ryan Escobar">
+  <option value="Ptr. Ryan Escobar">
+</datalist>
+
+<!-- MODAL -->
+<div class="modal-overlay" id="modalOverlay">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-header-icon">📋</div>
+      <div>
+        <h2>Voucher Submission Summary</h2>
+        <p>Please review all details before confirming</p>
+      </div>
+    </div>
+    <div class="modal-body" id="modalBody"></div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal()">✕ Cancel</button>
+      <button class="btn btn-outline" onclick="window.print()">🖨 Print</button>
+      <button class="btn btn-primary" id="confirmBtn" onclick="confirmSubmit()">✓ Confirm & Submit</button>
+    </div>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div class="toast" id="toast"></div>
+
+<!--
+  Config load order matters: approval-rules.js has no dependencies,
+  config.pilot.js declares window.CCF_CONFIG (ENVIRONMENT: 'TEST'), and
+  app.js requires both.
+
+  PILOT: this always loads config.pilot.js. There is no config.production.js
+  in this repo (see js/config.example.js and docs/mvp/test-environment.md
+  for why) — do not point this file at a production config without a
+  separate production-readiness review.
+
+  (Named config.pilot.js rather than config.test.js so it isn't
+  accidentally picked up by Node's `--test` auto-discovery, which treats
+  any *.test.js file as an automated test.)
+-->
+<script src="js/approval-rules.js"></script>
+<script src="js/config.pilot.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
