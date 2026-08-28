@@ -1,10 +1,11 @@
+import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUserId } from "@/lib/user-session";
 import { signOutAction } from "./actions";
 
 export const dynamic = "force-dynamic";
 
-export default async function RequesterLoginPage() {
+export default async function SignInPage() {
   const userId = await getCurrentUserId();
   const user = userId ? await prisma.user.findUnique({ where: { id: userId } }) : null;
 
@@ -16,14 +17,17 @@ export default async function RequesterLoginPage() {
           <p className="text-sm text-slate-500">
             {user.name} ({user.email})
           </p>
-          <p className="mt-2 text-sm text-slate-500">
-            Request creation isn&apos;t built yet — check back soon.
-          </p>
         </div>
+        <Link
+          href="/requests/new"
+          className="rounded-md bg-teal-600 px-4 py-2 text-sm font-semibold text-white hover:bg-teal-700"
+        >
+          New reimbursement request
+        </Link>
         <form action={signOutAction}>
           <button
             type="submit"
-            className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100"
+            className="text-sm text-slate-500 hover:underline"
           >
             Sign out
           </button>

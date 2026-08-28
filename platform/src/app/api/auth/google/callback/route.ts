@@ -18,7 +18,7 @@ export async function GET(request: NextRequest) {
   cookieStore.delete("google_oauth_code_verifier");
 
   if (!code || !state || !storedState || !codeVerifier || state !== storedState) {
-    return NextResponse.redirect(new URL("/requester-login?error=invalid_state", request.url));
+    return NextResponse.redirect(new URL("/sign-in?error=invalid_state", request.url));
   }
 
   const profile = await resolveGoogleProfile(code, codeVerifier);
@@ -38,9 +38,9 @@ export async function GET(request: NextRequest) {
 
   await createUserSession(user.id);
 
-  // No requester-facing page exists yet (that's the next slice) -- land
-  // back on requester-login itself, which shows a signed-in state instead
-  // of the sign-in button once a session exists. Deliberately NOT "/",
-  // which unconditionally redirects to Finance's own unrelated login.
-  return NextResponse.redirect(new URL("/requester-login", request.url));
+  // Land back on sign-in itself, which shows a signed-in state (with a
+  // link into /requests/new) instead of the sign-in button once a session
+  // exists. Deliberately NOT "/", which unconditionally redirects to
+  // Finance's own unrelated login.
+  return NextResponse.redirect(new URL("/sign-in", request.url));
 }
