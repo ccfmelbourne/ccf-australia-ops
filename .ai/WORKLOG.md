@@ -209,10 +209,20 @@ HMAC-signed cookie session pattern rather than adopting a third-party session li
 - Verified: `tsc --noEmit` clean, `node --test` 17/17 passing (2 new), `next lint` clean, `next
   build` succeeds with no Google/session env vars set (`/api/auth/google` and its callback both
   register as dynamic routes, `/requester-login` as static — none touched at build time).
-- **Not yet verified against real Google OAuth credentials** — Google Cloud Console project/
-  OAuth client creation was still pending with the decision-maker at time of writing. Live
-  verification (real sign-in, `User` row created/matched, session persists, Finance's own login
-  unaffected) is a follow-up once credentials exist.
+- **Update (2026-08-28, later same day):** Google Cloud OAuth client provisioned (External
+  audience, Testing mode, since requesters/approvers use personal Gmail rather than a CCF
+  Workspace domain). Live-verified with a real sign-in: `User` row created with `googleSub`/
+  `picture` populated, confirmed directly in the database.
+- **Bug found and fixed during live verification:** the callback originally redirected to `/`,
+  which unconditionally redirects to Finance's own unrelated login — since no requester-facing
+  page exists yet, this made a successful Google sign-in look like it had failed. Fixed to
+  redirect back to `/requester-login`, which now shows a signed-in state (name/email + sign out)
+  instead of just the sign-in button once a session exists. Re-verified: signed-out shows the
+  sign-in button, a valid session shows the correct signed-in account, sign-out clears it
+  correctly back to signed-out.
+- Also observed: a double-click on "Sign in with Google" can overwrite the in-flight OAuth state
+  cookie, causing the first attempt to fail with `invalid_state` while a retry succeeds. Not
+  fixed this slice — noted as a known rough edge, not a blocker.
 
 ## Open items
 None currently tracked as blocking.
