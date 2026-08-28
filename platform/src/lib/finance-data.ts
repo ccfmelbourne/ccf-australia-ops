@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { assertValidTransition, type FinanceStatus } from "@/lib/status-transitions";
+import { formatAmount } from "@/lib/money";
 import type {
   ApprovalHistoryEntryView,
   QueueItemView,
@@ -15,13 +16,6 @@ const FINANCE_STATUSES: FinanceStatus[] = [
   "PROCESSED",
   "REJECTED_RETURNED",
 ];
-
-function formatAmount(amount: { toString(): string }): string {
-  return Number(amount.toString()).toLocaleString("en-AU", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
-}
 
 export async function getFinanceQueue(): Promise<QueueItemView[]> {
   const requests = await prisma.reimbursementRequest.findMany({

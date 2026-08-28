@@ -224,6 +224,52 @@ HMAC-signed cookie session pattern rather than adopting a third-party session li
   cookie, causing the first attempt to fail with `invalid_state` while a retry succeeds. Not
   fixed this slice — noted as a known rough edge, not a blocker.
 
+## Slice 5: Create-DRAFT Request + Line Items (2026-08-28)
+Second slice of the request-creation/approval-routing phase (see the Phase Transition entry
+above). A signed-in requester can now create a `DRAFT` reimbursement request and add/remove
+expense line items on it — no receipts, bank details, or submission yet (still separate later
+slices per the roadmap).
+
+- `platform/src/lib/request-types.ts` + test: human-readable labels for the `RequestType`/
+  `MinistryType` enums (ministry labels match the pilot's original wording), with a test
+  guarding that every enum value has a label.
+- `platform/src/lib/money.ts`: extracted `formatAmount` out of `finance-data.ts` so
+  `request-data.ts` doesn't duplicate it — both now import the same helper.
+- Voucher numbering: added an atomic Postgres sequence (`voucher_no_seq`,
+  `prisma/migrations/..._add_voucher_no_sequence`) per spec 0002's explicit call for a
+  database-backed sequence, not `Math.random()`. Applied via the same manual-migration +
+  `migrate deploy` route as the Google sign-in slice (`migrate dev` still refuses non-interactive
+  shells).
+- `platform/src/lib/request-data.ts` + test: `createDraftRequest`, `getDraftRequest` (scoped to
+  the requester's own `DRAFT` rows only), `addLineItem`/`removeLineItem` (atomic
+  increment/decrement on `totalAmount`, not a re-fetch-and-sum).
+- **Real bug found and fixed during live testing, worth flagging clearly:** the first
+  implementation used Prisma's *interactive* transaction form
+  (`prisma.$transaction(async (tx) => {...})`) for `addLineItem`/`removeLineItem`. Live testing
+  showed the first such transaction in a session always persisted correctly, but every
+  subsequent one silently failed to persist its writes — no thrown error, no log line, just
+  data that never showed up — in this exact stack (Prisma 7 + `@prisma/adapter-pg` + Next.js
+  dev server, tested against Neon's pooled endpoint). Root cause not fully isolated (ruled out:
+  the Neon pooler itself — a standalone script against both the pooled and direct connection
+  strings worked fine outside of Next's request-handling context). Fixed by switching to the
+  array-form `prisma.$transaction([...])` already used successfully in `finance-data.ts`,
+  restructured around atomic `increment`/`decrement` so no operation depends on reading another
+  op's result first. Verified with three sequential add/add/remove calls in one session — all
+  three now persist correctly.
+- **Second, separate bug found and fixed:** after switching to the array-transaction fix above,
+  server-side data was confirmed correct (a raw `fetch()` to the page immediately after showed
+  the right content), but the *browser* kept rendering the pre-mutation page. This was Next's
+  client-side Router Cache not being busted by a Server Action's `redirect()` back to the exact
+  page it was submitted from, even with `revalidatePath` called first. Fixed by converting the
+  add/remove UI to a client component (`LineItemManager.tsx`, mirroring `StatusTransitionForm.tsx`'s
+  existing `useTransition` pattern already used on the Finance side) that calls the actions
+  imperatively and calls `router.refresh()` on success, rather than relying on a same-page
+  Server Action redirect to refresh the client.
+- Verified end-to-end with a real signed-in Google account: create draft → add two line items
+  (correct running total) → remove one (total correctly recomputed) → confirmed against the
+  database directly. `tsc --noEmit`, `next lint`, `node --test` (19/19 passing, 2 new in
+  `request-types.test.ts`) all clean, `next build` succeeds.
+
 ## Open items
 None currently tracked as blocking.
 
