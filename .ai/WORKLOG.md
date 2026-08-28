@@ -165,9 +165,11 @@ this doesn't lock in that decision yet.
 - Verified: `tsc --noEmit` clean, `node --test` 15/15 passing (6 new), `next lint` clean, `next
   build` succeeds with no R2 env vars set (this module isn't imported/wired into any route yet,
   so it's inert until a caller exists).
-- **Not yet verified against a real R2 bucket** — Cloudflare R2 access/API token creation was
-  still in progress with the decision-maker at time of writing. Live verification (an actual
-  upload + signed-URL fetch round-trip) is a follow-up once credentials exist.
+- **Update (2026-08-28, later same day):** Cloudflare R2 bucket (`oc` Oceania) and API token
+  provisioned. Live-verified against the real bucket: uploaded a test file via `uploadReceipt`,
+  generated a signed URL via `getReceiptDownloadUrl`, fetched it, and confirmed the round-tripped
+  content and `Content-Type` matched exactly (`200 OK`). Test object deleted afterward. R2
+  storage infrastructure is now fully verified end-to-end, still not wired into any route/UI.
 
 ## Open items
 None currently tracked as blocking.
