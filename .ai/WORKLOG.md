@@ -274,8 +274,106 @@ slices per the roadmap).
   approvers too (they'll sign in through this exact page once slice 8 adds approver-facing UI),
   so "requester-login" was already inaccurate, not something that would only become wrong later.
 
-## Open items
-None currently tracked as blocking.
+## Slice 6: Receipt Upload Wiring (2026-08-28)
+Third slice of the request-creation/approval-routing phase. Connects the already-built
+`receipt-storage.ts` (slice 3) to a real upload UI on the draft request — upload, view, remove.
+
+- `platform/src/lib/request-data.ts`: `addReceiptRecord`/`removeReceiptRecord` (ownership/DRAFT
+  guards via the new shared `assertOwnsDraftRequest`, factored out of the duplicated check
+  `addLineItem` already had). `getDraftRequest` now computes each receipt's signed view URL at
+  render time (see below for why) via `getReceiptDownloadUrl`.
+- `platform/src/app/requests/actions.ts`: `uploadReceiptAction` validates the file
+  (`assertValidReceiptFile`) and confirms draft ownership *before* the R2 upload, not just
+  inside the DB write afterward, so an expired session doesn't waste an upload. `removeReceiptAction`
+  deletes both the DB record and the R2 object (`deleteReceipt`, newly added to
+  `receipt-storage.ts`, not previously needed).
+- `platform/src/components/requests/ReceiptManager.tsx`: upload form + list, mirroring
+  `LineItemManager.tsx`'s client-component pattern.
+- **Real bug found and fixed during live testing:** the first "View" implementation fetched a
+  signed URL via a Server Action on click, then called `window.open(url, "_blank", "noopener")`.
+  This never worked: `noopener` makes `window.open()` return `null` by spec (that's the whole
+  point of `noopener` — no handle back to the new tab), so there was nothing to navigate once the
+  URL arrived. Fixing that alone wasn't enough either — even opening a blank tab synchronously
+  and later setting `tab.location.href` proved unreliable in practice. Replaced entirely: each
+  receipt's signed URL is now computed server-side in `getDraftRequest` at page-render time, and
+  "View" is a plain `<a href target="_blank">` — native browser navigation, no click-time fetch
+  or popup-window handling at all. Trade-off: the link can expire (5 min default) if the page
+  sits open unclicked; reloading gets a fresh one. Acceptable for this scale.
+- Verified end-to-end with a real signed-in Google account against the real R2 bucket and
+  database: upload a PDF → confirmed in DB and R2 → View link's signed URL fetched directly
+  returns the exact uploaded bytes → Remove deletes both the DB record and the R2 object →
+  confirmed empty afterward. `tsc --noEmit`, `next lint`, `node --test` (19/19 passing) all
+  clean, `next build` succeeds.
+
+## Slice 7: Receipt Scanning — Provider-Agnostic OCR Extraction (2026-08-28)
+Fourth slice of the request-creation/approval-routing phase. Adds an opt-in "scan receipt for
+suggested information" feature on top of slice 6's upload/view/remove.
+
+- **Course correction, worth recording:** the first implementation called the Anthropic API
+  directly (Claude vision + structured output) and was fully built/tested. The decision-maker
+  rejected committing to Anthropic for this feature and specified a different architecture
+  instead: a provider-agnostic `ReceiptExtractionService` interface, **Google Cloud Vision
+  Document Text Detection** (OCR only, no AI) as the first implementation (free tier covers
+  pilot volume), and a different UX — one "Suggested information" card (Merchant/Date/Amount/GST)
+  with Confirm/Edit, not a list of arbitrary suggested line items. The Anthropic code
+  (`receipt-scan.ts`, `@anthropic-ai/sdk`) was removed entirely, not adapted.
+- `platform/src/lib/receipt-extraction/`: `types.ts` defines the interface
+  (`ReceiptExtractionService.extract({ buffer, contentType }) -> ReceiptExtractionResult`, every
+  field nullable). `parse-receipt-text.ts` + test: pure, non-AI heuristic parsing of raw OCR text
+  (merchant = first non-date/amount/ABN line; date via AU numeric/worded regexes; amount via a
+  `TOTAL`-labelled line, falling back to the largest dollar figure; GST via a `GST`-labelled
+  line). `google-vision-extractor.ts`: the I/O half, using the official `@google-cloud/vision`
+  client with a service-account credential. `index.ts` is the swap point for a future provider.
+- **PDF OCR without a storage redesign, worth recording:** PDFs needed to be scannable (not
+  deferred), which meant service-account auth (Vision's plain API-key auth only covers the image
+  endpoint). Confirmed directly against Google's API reference that Vision's *synchronous*
+  `files.annotate`/`batchAnnotateFiles` endpoint accepts a PDF as inline base64 `content` — a
+  `gcsSource` is one option on `InputConfig`, not a requirement — so the extractor downloads
+  receipt bytes from R2 (already-existing `downloadReceiptBytes`) and sends them straight to
+  Vision over HTTPS, server-side only. Google Cloud Storage is never introduced; R2 remains the
+  app's only object storage (ADR 0002).
+- `platform/src/app/requests/actions.ts`: `extractReceiptAction` replaces `scanReceiptAction`,
+  same ownership-checked shape, never writes to the DB — confirming a suggestion still goes
+  through the existing `addLineItemAction`.
+- `platform/src/components/requests/ReceiptManager.tsx`: the scan button now renders one
+  suggestion card (Merchant/Date/Amount/GST) with Confirm/Edit/Cancel, matching the
+  decision-maker's mockup. Confirm calls `addLineItemAction` with the (possibly edited)
+  merchant/amount, so a confirmed suggestion becomes an ordinary line item in the existing list —
+  Date/GST are shown for context only, not persisted (no schema change).
+- Known gap: Vision rejects HEIC receipts (confirmed live, despite some docs listing it) —
+  scanning shows a clear "not supported, add manually" message; upload/view/remove for HEIC is
+  unaffected. JPEG/PNG/GIF/PDF/TIFF are all scannable.
+- Added `GOOGLE_VISION_CREDENTIALS_JSON` to `platform/.env.example` (service-account JSON,
+  server-side only); removed the `ANTHROPIC_API_KEY` entry.
+- Verified: `tsc --noEmit` clean, `next lint` clean, `node --test` all passing (7 new tests:
+  5 for `parse-receipt-text.ts`'s heuristics, 2 for the file-type gate), `next build` succeeds
+  with no `GOOGLE_VISION_CREDENTIALS_JSON` set. Live-verified against the real R2 bucket/database
+  with a real signed-in Google account: upload still works, the scan action fails gracefully with
+  a clear configuration error when Vision credentials aren't set (no crash, no suggestion card,
+  nothing auto-populated), and view/remove are unaffected.
+- **Update (2026-08-28, later same day): live Vision API round-trip verified**, after a GCP
+  service account (`receipt-ocr@ccf-australia-platform.iam.gserviceaccount.com`, project
+  `ccf-australia-platform`) was provisioned and billing linked (Vision requires an active billing
+  account even within the free tier — the first attempt correctly failed closed with a clear
+  `PERMISSION_DENIED: billing not enabled` message shown in the UI, rather than crashing, until
+  that was fixed). Tested against both a real image and a real PDF built from the same receipt
+  content: merchant ("Woolworths") and date extracted correctly for both file types, but the
+  amount came back as the subtotal instead of the total, and GST wasn't found at all.
+- **Real bug found and fixed from that live testing:** printed the actual raw OCR text Vision
+  returned (`GoogleVisionReceiptExtractor` exposes it via `ReceiptExtractionResult.rawText`,
+  called directly rather than through the UI) and found the root cause: a wide horizontal gap
+  between a right-aligned label column and its amount column makes Vision read the whole label
+  column first ("SUBTOTAL" / "GST" / "TOTAL" as three consecutive lines), then the whole amount
+  column after it ("$14.27" / "$1.43" / "$15.70"), instead of keeping each label next to its own
+  value — a genuine Vision OCR layout quirk, not something guessable from the plain text alone.
+  Fixed in `parse-receipt-text.ts` with `pairColumnLabelsWithAmounts`: when a contiguous run of
+  known label lines (subtotal/GST/total) is immediately followed by a contiguous run of
+  amount-only lines of the same length, pair them positionally. Same-line matching is still tried
+  first (still the common case and the most reliable); this column-pairing is the fallback. Added
+  2 tests reproducing the real captured OCR shape and a simpler single-label-then-its-amount case
+  (9/9 passing total). Re-verified live against the real Vision API after the fix: Merchant, Date,
+  Amount ($15.70 — the actual total, not the subtotal), and GST ($1.43) all now correctly
+  extracted end-to-end for a real image.
 
 ## Decided
 - Track A pilot's approval logic will not be updated to match the confirmed Regional

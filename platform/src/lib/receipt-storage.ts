@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { S3Client, PutObjectCommand, GetObjectCommand } from "@aws-sdk/client-s3";
+import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
 // Cloudflare R2 is S3-compatible (ADR 0002, using the `oc` Oceania location
@@ -94,4 +94,27 @@ export async function getReceiptDownloadUrl(
 ): Promise<string> {
   const command = new GetObjectCommand({ Bucket: getBucketName(), Key: storageKey });
   return getSignedUrl(getClient(), command, { expiresIn: expiresInSeconds });
+}
+
+export async function deleteReceipt(storageKey: string): Promise<void> {
+  await getClient().send(new DeleteObjectCommand({ Bucket: getBucketName(), Key: storageKey }));
+}
+
+// Fetches the actual file bytes -- used for server-side processing (e.g.
+// feeding the receipt to Claude for scanning), not for showing it to a
+// browser (that's getReceiptDownloadUrl's job).
+export async function downloadReceiptBytes(
+  storageKey: string,
+): Promise<{ buffer: Buffer; contentType: string }> {
+  const response = await getClient().send(
+    new GetObjectCommand({ Bucket: getBucketName(), Key: storageKey }),
+  );
+  if (!response.Body) {
+    throw new Error(`Receipt ${storageKey} has no content.`);
+  }
+  const bytes = await response.Body.transformToByteArray();
+  return {
+    buffer: Buffer.from(bytes),
+    contentType: response.ContentType ?? "application/octet-stream",
+  };
 }

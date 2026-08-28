@@ -3,6 +3,7 @@ import { getCurrentUserId } from "@/lib/user-session";
 import { getDraftRequest } from "@/lib/request-data";
 import { REQUEST_TYPE_LABELS, MINISTRY_TYPE_LABELS } from "@/lib/request-types";
 import { LineItemManager } from "@/components/requests/LineItemManager";
+import { ReceiptManager } from "@/components/requests/ReceiptManager";
 
 export const dynamic = "force-dynamic";
 
@@ -32,6 +33,8 @@ export default async function DraftRequestPage(props: PageProps<"/requests/[id]"
         lineItems={request.lineItems}
         totalAmount={request.totalAmount}
       />
+
+      <ReceiptManager requestId={request.id} receipts={request.receipts} />
     </div>
   );
 }
