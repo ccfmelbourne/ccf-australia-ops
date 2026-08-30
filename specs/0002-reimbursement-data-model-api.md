@@ -292,7 +292,8 @@ implementation. Differences worth folding back in:
   to restrict access on — bank details are owner-only until the future submit+approval+email
   slice reads them server-side to build the email to Finance. Encryption-at-rest is an explicit
   TODO (see `platform/prisma/schema.prisma`'s comment), not yet built — relying on Neon's
-  standard disk-level encryption for now.
+  standard disk-level encryption for now. Decision-maker call (2026-08-30): build it before the
+  official testing phase begins, not before then.
 - `RegionalDirectorOverride`/`OverrideApproval` remain deferred, not disproven — no submit/
   approval-routing action exists yet, so there's nothing to validate them against.
 - `Decimal` fields (`totalAmount`, `LineItem.amount`) needed explicit precision —

@@ -12,7 +12,9 @@
 // encryption + strict access control (owner-only reads) for now.
 // Application-level field encryption is an open TODO -- see spec 0002's
 // "Sensitive data" section -- deferred since it needs new key-management
-// infrastructure not present anywhere else in this codebase.
+// infrastructure not present anywhere else in this codebase. Decision-maker
+// call (2026-08-30): build it before the official testing phase begins,
+// not before then.
 
 generator client {
   provider = "prisma-client"
