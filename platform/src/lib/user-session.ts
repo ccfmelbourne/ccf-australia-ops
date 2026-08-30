@@ -1,11 +1,8 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { cookies } from "next/headers";
 
-// Generalizes finance-auth.ts's HMAC-signed cookie pattern to carry an
-// arbitrary userId instead of one fixed shared identity. Uses a separate
-// cookie name (app_session) so this session is fully independent of
-// Finance's own finance_session cookie -- no shared state, no migration
-// needed for Finance's existing login.
+// HMAC-signed cookie carrying an arbitrary userId (requesters/approvers
+// sign in via Google -- see google-oauth.ts).
 
 const COOKIE_NAME = "app_session";
 

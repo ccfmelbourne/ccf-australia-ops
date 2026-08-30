@@ -1,13 +1,18 @@
 // This is your Prisma schema file,
 // learn more about it in the docs: https://pris.ly/d/prisma-schema
 //
-// Slice-1 subset of specs/0002-reimbursement-data-model-api.md (repo root).
-// Intentionally NOT modeled yet (out of scope for this vertical slice; add
-// when a later slice actually needs them, per the charter's "update the
-// spec/schema when implementation reveals a gap" rule):
-//   - BankDetails (not shown anywhere in the Finance-side slice-1 UI)
+// Subset of specs/0002-reimbursement-data-model-api.md (repo root).
+// Intentionally NOT modeled yet (out of scope so far; add when a later
+// slice actually needs it, per the charter's "update the spec/schema when
+// implementation reveals a gap" rule):
 //   - RegionalDirectorOverride / OverrideApproval (approval creation isn't
-//     part of this slice — slice 1 starts from an already-approved request)
+//     part of this slice — no submit/approval-routing action exists yet)
+//
+// BankDetails encryption-at-rest: relies on Neon's standard disk-level
+// encryption + strict access control (owner-only reads) for now.
+// Application-level field encryption is an open TODO -- see spec 0002's
+// "Sensitive data" section -- deferred since it needs new key-management
+// infrastructure not present anywhere else in this codebase.
 
 generator client {
   provider = "prisma-client"
@@ -99,6 +104,7 @@ model ReimbursementRequest {
 
   lineItems         LineItem[]
   receipts          Receipt[]
+  bankDetails       BankDetails?
   requiredApprovals RequiredApproval[]
   auditLog          AuditLogEntry[]
 }
@@ -117,6 +123,20 @@ model Receipt {
   request                ReimbursementRequest @relation(fields: [reimbursementRequestId], references: [id])
   storageKey             String
   uploadedAt             DateTime             @default(now())
+}
+
+// One-to-one, kept as its own table (not columns on ReimbursementRequest)
+// so it can be access-restricted / encrypted independently -- see spec
+// 0002's "Sensitive data" section. Owner-only (requester on their own
+// DRAFT request); no other route reads this.
+model BankDetails {
+  id                     String               @id @default(cuid())
+  reimbursementRequestId String               @unique
+  request                ReimbursementRequest @relation(fields: [reimbursementRequestId], references: [id])
+  accountName            String
+  bsb                    String
+  accountNumber          String
+  updatedAt              DateTime             @updatedAt
 }
 
 model RequiredApproval {

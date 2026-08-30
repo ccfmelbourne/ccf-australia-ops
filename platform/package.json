@@ -10,7 +10,7 @@
     "lint": "eslint",
     "storybook": "storybook dev -p 6006",
     "build-storybook": "storybook build",
-    "test": "node --test src/lib/**/*.test.ts",
+    "test": "node --test \"src/lib/**/*.test.ts\"",
     "db:migrate": "prisma migrate dev",
     "db:generate": "prisma generate",
     "db:seed": "tsx prisma/seed.ts",

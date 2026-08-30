@@ -238,6 +238,14 @@ Track A pilot, and should be unit tested the same way that file is.
 
 ## API / action contract (illustrative, not a full OpenAPI spec)
 
+**TODO (not yet updated):** the Finance-driven rows below (`markNeedsClarification`,
+`requestChanges`, `markProcessing`/`markProcessed`) predate the confirmed decision that Finance no
+longer logs into the app at all — see the "Finance Retires From the App" phase transition in
+`.ai/WORKLOG.md`. Once full approval instead triggers an automated email to Finance with the
+rendered form + receipts + bank details, this table (and the `RequestStatus` values it implies)
+needs revising to match — not done yet, since the submit/approval-routing action that would
+trigger it doesn't exist yet either.
+
 | Action | Who | Effect |
 |---|---|---|
 | `createRequest` | Requester | New `DRAFT` request |
@@ -278,24 +286,29 @@ Finance V1 slice 1 (`platform/prisma/schema.prisma`) implemented the `User`,
 essentially as sketched, confirming the shape holds up under a real Prisma/PostgreSQL
 implementation. Differences worth folding back in:
 
-- `BankDetails` and `RegionalDirectorOverride`/`OverrideApproval` were deferred, not disproven —
-  slice 1's Finance-side UI never touches bank details or override creation, so there was nothing
-  to validate them against yet. Still to be validated whenever a later slice implements request
-  submission/override handling.
+- `BankDetails` implemented as sketched (slice 8, 2026-08-30) — same field names, kept as its own
+  1:1 table. One change: since Finance no longer logs into the app at all (see the "Finance
+  Retires From the App" phase transition in `.ai/WORKLOG.md`), there's no Finance-side read view
+  to restrict access on — bank details are owner-only until the future submit+approval+email
+  slice reads them server-side to build the email to Finance. Encryption-at-rest is an explicit
+  TODO (see `platform/prisma/schema.prisma`'s comment), not yet built — relying on Neon's
+  standard disk-level encryption for now.
+- `RegionalDirectorOverride`/`OverrideApproval` remain deferred, not disproven — no submit/
+  approval-routing action exists yet, so there's nothing to validate them against.
 - `Decimal` fields (`totalAmount`, `LineItem.amount`) needed explicit precision —
   `@db.Decimal(12, 2)` — which this sketch's `Decimal` didn't specify. Carry that precision
   forward into any future model using money amounts.
 - Prisma 7 requires an explicit `generator` block with `provider = "prisma-client"` and a custom
   `output` path (this sketch didn't show a `generator` block at all, since it predates that
   requirement being confirmed).
-- The role/assignment open question below got a partial, practical answer for the Finance side
-  specifically: slice 1 doesn't add a separate role/assignment table. Instead, the single
-  env-configured Finance identity is lazily upserted into `User` by email
-  (`getOrCreateAccountantUser` in `platform/src/app/finance/actions.ts`) the first time it's
-  needed, and `AuditLogEntry.actorUserId` simply points at that row. This works because slice 1
-  has exactly one Finance user; it does not resolve how *approver* role assignment (Ministry
-  Overseer/COS1/COS2/Finance Overseer per ministry group) should be modeled once request
-  submission/routing exists — that part of the open question below is still open.
+- The role/assignment open question below got a partial, practical answer for the Finance side in
+  slice 1 (a single env-configured Finance identity lazily upserted into `User` by email) — since
+  superseded: the Finance login/queue system this supported was removed entirely in slice 8, once
+  the decision-maker confirmed Finance no longer interacts with the app at all (see the "Finance
+  Retires From the App" phase transition in `.ai/WORKLOG.md`). It does not resolve how *approver*
+  role assignment (Ministry Overseer/COS1/COS2/Finance Overseer per ministry group) should be
+  modeled once request submission/routing exists — that part of the open question below is still
+  open.
 
 ## Open questions
 - Should `User` carry role/permission data directly, or is that a separate

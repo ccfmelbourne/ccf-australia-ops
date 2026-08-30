@@ -377,6 +377,79 @@ suggested information" feature on top of slice 6's upload/view/remove.
   Amount ($15.70 — the actual total, not the subtotal), and GST ($1.43) all now correctly
   extracted end-to-end for a real image.
 
+## Phase Transition: Finance Retires From the App (2026-08-30)
+The decision-maker confirmed a real change to the business process, direct from a conversation
+with Finance: **Finance will no longer log into the app at all.** Only requesters and approvers
+use it (Google sign-in). Once a request clears the full approval chain, the app will automatically
+email Finance the completed form (request type, ministry, line items, bank details) with the
+receipt(s) attached; anything Finance needs after that is handled outside the app via direct
+communication with the requester, not an in-app status-transition loop. Confirmed via three
+targeted questions before building anything: the email fires **after full approval** (not at
+initial submission), the old Finance login/queue/status UI is **removed entirely** (not left
+dormant), and the email includes **bank details and all other form details**.
+
+This retires the entire Finance V1 slice-1/2/3 system and means Bank Details must exist before
+that eventual email can ever be sent, since Finance has no other way to see the payment account.
+Updated roadmap: (4) Bank details, (5) remove Finance login — both this slice — then (6) My
+Requests list (still deferred), (7) approval-routing logic, (8) submit action, (9) approver UI,
+(10) tier-4 override, (11) Request Changes/re-approval, (12) on full approval, render the form +
+receipts + bank details and email Finance (replaces the old Finance-queue terminal step; a
+useful reference for "the correct form" layout found in the pilot's own HTML-voucher-for-email
+code, `mvp/reimbursement-voucher/js/app.js` around the `Bank Details for Payment` section).
+
+## Slice 8: Bank Details + Retire Finance Login (2026-08-30)
+- `BankDetails` model added (1:1 with `ReimbursementRequest`, per spec 0002's already-sketched
+  shape — field names confirmed against the pilot's own form so Finance sees the same fields
+  they're used to). `platform/src/lib/bank-details.ts` + test: pure BSB/account-number validation
+  (`normalizeBsb`, `formatBsb`, `assertValidAccountNumber`), mirroring the
+  `assertValidReceiptFile` pure/impure split. `upsertBankDetails` in `request-data.ts` reuses
+  `assertOwnsDraftRequest`'s compound requester+DRAFT check and writes an `AuditLogEntry` that
+  never includes the account number/BSB — the audit trail records that a change happened, never
+  the sensitive values. `BankDetailsManager.tsx` (new client component, same
+  `useTransition`/`router.refresh()` pattern as `LineItemManager.tsx`) adds a **"Confirm account
+  number"** field that must match before saving — a lightweight anti-fat-finger safeguard for a
+  field that determines where real money goes.
+- Simpler than spec 0002 originally implied: since Finance never opens the app now, there's no
+  Finance-side read-only view to build for bank details at all — owner-only until the future
+  submit+email slice reads them server-side. Encryption-at-rest: relying on Neon's standard
+  disk-level encryption + strict access control for now (app-level field encryption flagged as an
+  explicit TODO in `schema.prisma`, since it needs key-management infrastructure this codebase
+  doesn't have anywhere yet — a real decision, not a silent omission).
+- **Finance login system removed entirely**, confirmed not to be left dormant: `/login`,
+  `/finance` (queue + detail + layout + actions), `finance-auth.ts`, `finance-data.ts`,
+  `components/finance/*` (+ their Storybook stories), `status-transitions.ts` (+ test),
+  `types/finance.ts`, and `proxy.ts` (its only job was gating `/finance/*`, so the whole file is
+  now dead). `notifications.ts` keeps its generic Resend client/from-address helpers (a future
+  "email Finance the approved form" notification will want them) but loses
+  `buildStatusChangeEmail`/`sendStatusChangeEmail`, which had no caller left once
+  `finance/actions.ts` was deleted (confirmed via grep for actual imports, not just comment
+  mentions, before deleting anything).
+- **Real bug found and fixed along the way:** the root page (`/`) unconditionally redirected to
+  `/finance` — a leftover from when Finance was the only audience. Now redirects to `/sign-in`.
+- **Second, more significant bug found and fixed:** `npm test`'s glob
+  (`node --test src/lib/**/*.test.ts`) turned out to have been silently running only a fraction of
+  the suite since `receipt-extraction/` (a subdirectory under `src/lib/`) was added in slice 7 —
+  this machine's `/bin/bash` has no `globstar` support, so `**` degrades to matching exactly one
+  path segment. Before slice 7, every test file was flat in `src/lib/`, so the glob matched
+  nothing and bash's default behavior (no `nullglob`) passed the literal unexpanded string to
+  `node --test`, which has its own, correctly-recursive glob engine — working by accident. Once
+  `receipt-extraction/` existed, bash could partially expand the pattern (matching only that one
+  subdirectory), silently dropping every flat test file (`bank-details`, `google-oauth`,
+  `notifications`, `receipt-storage`, `request-types`, `status-transitions`) from every
+  `npm test` run since, in both local runs and CI. Confirmed the same undercount by running the
+  literal glob string directly and counting matches (9 vs. the correct 33). Fixed by quoting the
+  glob in `package.json` (`"src/lib/**/*.test.ts"`) so the shell never touches it, leaving Node's
+  own glob engine to do the (correct) recursive discovery.
+- Verified: `tsc --noEmit` clean, `next lint` clean, `node --test` 24/24 passing (33 minus the 9
+  Finance-specific tests removed with `status-transitions.ts`/`notifications.test.ts`), `next
+  build` succeeds (confirms no dangling imports from the Finance removal — route list now shows
+  no `/finance`/`/login`, no Proxy/Middleware), `storybook build` succeeds. Live, with a real
+  signed-in Google account: bank details save/persist/reload correctly, a deliberate
+  account-number mismatch is rejected with a clear error, a *different* signed-in user gets a 404
+  trying to open someone else's draft (bank details never leak across accounts), `/login` and
+  `/finance` now correctly 404, `/` redirects to `/sign-in`, and line items/receipts are
+  unaffected by any of the above (regression-checked).
+
 ## Decided
 - Track A pilot's approval logic will not be updated to match the confirmed Regional
   Director/COS-override rule — the pilot stays as-is (Oceana-only rule) for the remainder of
@@ -391,3 +464,30 @@ suggested information" feature on top of slice 6's upload/view/remove.
   guarantee, so R2 with the `oc` (Oceania) location hint stands as the storage choice. Amazon S3
   in `ap-southeast-2` remains the fallback if that ever changes — see ADR 0002's "Data residency"
   note for the technical reasoning.
+- **Production deployment gap found and fixed (2026-08-28):** almost none of `.env.example`'s
+  variables had ever been added to Vercel — only the Neon-integration DB vars and (once slice 7
+  needed it) `GOOGLE_VISION_CREDENTIALS_JSON`. Every prior slice's live verification ran against a
+  local dev server, so this had never surfaced. Google sign-in was the first thing actually
+  exercised against the deployed app, and it 500'd (`GOOGLE_CLIENT_ID is not set`). Fixed by
+  adding `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET`/`GOOGLE_REDIRECT_URI`/`APP_SESSION_SECRET` to
+  Vercel; `GOOGLE_REDIRECT_URI` needed its own production value
+  (`https://ccf-australia-ops.vercel.app/api/auth/google/callback`, not the localhost one) which
+  also had to be separately added to the OAuth client's Authorized redirect URIs in Google Cloud
+  Console (Google rejects an unregistered redirect URI outright — `redirect_uri_mismatch`). A
+  second, subtler issue after that: signing in from one of Vercel's per-deployment URLs (e.g.
+  `ccf-australia-<hash>-ccf-melbourne.vercel.app`, what the dashboard's "Visit" button links to)
+  rather than the stable `ccf-australia-ops.vercel.app` domain caused `invalid_state`, since the
+  OAuth state/PKCE cookie is scoped to whichever hostname the flow started on, but Google always
+  returns to the fixed `GOOGLE_REDIRECT_URI` hostname — a mismatch if those differ. Always start
+  sign-in from the stable production domain, not a deployment-specific URL. Finance/Resend/R2 env
+  vars are still not configured on Vercel — not yet urgent since nothing currently in production
+  depends on them live (Finance login/queue was removed the same day this was found; Resend has
+  no caller left either — see the Phase Transition below).
+- **Vercel Hobby-plan branch deployment limit hit (2026-08-28):** merging PR #11 revealed
+  deployments failing instantly (`BUILD_FAILED: Resource provisioning failed`, no build log at
+  all — confirmed via the Vercel API, not guessed) once too many git branches existed. Fixed by
+  merging the never-merged `docs/verify-r2-live` branch's one commit into `main` directly (no PR,
+  a small docs-only update) and, since disabling deploys for a branch via `vercel.json`'s
+  `git.deploymentEnabled` did **not** free a slot (only actual branch deletion did), merging the
+  Track A pilot branch's full history into `main` via PR #12 so `pilot/reimbursement-voucher-test`
+  could be deleted without losing it — it's the same code, just no longer a separate branch.

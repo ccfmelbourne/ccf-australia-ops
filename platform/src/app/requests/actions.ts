@@ -11,6 +11,7 @@ import {
   addReceiptRecord,
   removeReceiptRecord,
   getReceiptStorageKeyForOwner,
+  upsertBankDetails,
 } from "@/lib/request-data";
 import { REQUEST_TYPES, MINISTRY_TYPES } from "@/lib/request-types";
 import {
@@ -144,6 +145,51 @@ export async function removeReceiptAction(
   try {
     const { storageKey } = await removeReceiptRecord(receiptId, userId);
     await deleteReceipt(storageKey);
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Something went wrong." };
+  }
+}
+
+const bankDetailsSchema = z
+  .object({
+    accountName: z.string().trim().min(1, "Account name is required"),
+    bsb: z.string().trim().min(1, "BSB is required"),
+    accountNumber: z.string().trim().min(1, "Account number is required"),
+    confirmAccountNumber: z.string().trim().min(1, "Please confirm the account number"),
+  })
+  .refine((data) => data.accountNumber === data.confirmAccountNumber, {
+    message: "Account numbers don't match.",
+    path: ["confirmAccountNumber"],
+  });
+
+export async function saveBankDetailsAction(
+  requestId: string,
+  formData: FormData,
+): Promise<{ ok: boolean; error?: string }> {
+  const userId = await getCurrentUserId();
+  if (!userId) {
+    return { ok: false, error: "Not signed in." };
+  }
+
+  const parsed = bankDetailsSchema.safeParse({
+    accountName: formData.get("accountName"),
+    bsb: formData.get("bsb"),
+    accountNumber: formData.get("accountNumber"),
+    confirmAccountNumber: formData.get("confirmAccountNumber"),
+  });
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input" };
+  }
+
+  try {
+    await upsertBankDetails(
+      requestId,
+      userId,
+      parsed.data.accountName,
+      parsed.data.bsb,
+      parsed.data.accountNumber,
+    );
     return { ok: true };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : "Something went wrong." };

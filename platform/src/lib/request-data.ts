@@ -1,16 +1,16 @@
 import { prisma } from "@/lib/prisma";
 import { formatAmount } from "@/lib/money";
 import { getReceiptDownloadUrl } from "@/lib/receipt-storage";
+import { normalizeBsb, formatBsb, assertValidAccountNumber } from "@/lib/bank-details";
 import type { RequestTypeValue, MinistryTypeValue } from "@/lib/request-types";
 
-// Uses array-form prisma.$transaction([...]) throughout (matches
-// finance-data.ts), not the interactive prisma.$transaction(async (tx) =>
-// {...}) callback form. In this exact stack (Prisma 7 + @prisma/adapter-pg
-// + Next.js dev server, tested against Neon), a second interactive
-// transaction issued shortly after a first one silently failed to persist
-// its writes -- no thrown error, no log -- while array-form transactions
-// did not exhibit this. Root cause not fully isolated; array-form is the
-// proven-safe pattern here.
+// Uses array-form prisma.$transaction([...]) throughout, not the
+// interactive prisma.$transaction(async (tx) => {...}) callback form. In
+// this exact stack (Prisma 7 + @prisma/adapter-pg + Next.js dev server,
+// tested against Neon), a second interactive transaction issued shortly
+// after a first one silently failed to persist its writes -- no thrown
+// error, no log -- while array-form transactions did not exhibit this.
+// Root cause not fully isolated; array-form is the proven-safe pattern here.
 
 export interface DraftLineItemView {
   id: string;
@@ -29,6 +29,12 @@ export interface DraftReceiptView {
   viewUrl: string;
 }
 
+export interface DraftBankDetailsView {
+  accountName: string;
+  bsb: string; // formatted, e.g. "123-456"
+  accountNumber: string;
+}
+
 export interface DraftRequestView {
   id: string;
   voucherNo: string;
@@ -37,6 +43,7 @@ export interface DraftRequestView {
   totalAmount: string; // formatted
   lineItems: DraftLineItemView[];
   receipts: DraftReceiptView[];
+  bankDetails: DraftBankDetailsView | null;
 }
 
 // storageKey is "receipts/{requestId}/{uuid}-{safeName}" (buildReceiptStorageKey
@@ -65,8 +72,8 @@ export async function createDraftRequest(
   ministryType: MinistryTypeValue,
 ): Promise<{ id: string }> {
   const voucherNo = await nextVoucherNo();
-  // Array-form transaction (matches finance-data.ts's existing pattern) --
-  // each op is independent, no op needs to read another's result first.
+  // Array-form transaction -- each op is independent, no op needs to read
+  // another's result first.
   const [request] = await prisma.$transaction([
     prisma.reimbursementRequest.create({
       data: {
@@ -108,7 +115,7 @@ export async function getDraftRequest(
 ): Promise<DraftRequestView | null> {
   const r = await prisma.reimbursementRequest.findFirst({
     where: { id, requesterId, status: "DRAFT" },
-    include: { lineItems: true, receipts: true },
+    include: { lineItems: true, receipts: true, bankDetails: true },
   });
   if (!r) return null;
   const receipts = await Promise.all(
@@ -131,7 +138,42 @@ export async function getDraftRequest(
       amount: formatAmount(li.amount),
     })),
     receipts,
+    bankDetails: r.bankDetails
+      ? {
+          accountName: r.bankDetails.accountName,
+          bsb: formatBsb(r.bankDetails.bsb),
+          accountNumber: r.bankDetails.accountNumber,
+        }
+      : null,
   };
+}
+
+// A single upsert (not separate add/remove) since BankDetails is 1:1 --
+// re-saving replaces the previous values. No account number/BSB ever goes
+// into the AuditLogEntry's details -- the audit trail records that a
+// change happened, never the sensitive values themselves.
+export async function upsertBankDetails(
+  requestId: string,
+  requesterId: string,
+  accountName: string,
+  bsbRaw: string,
+  accountNumber: string,
+): Promise<void> {
+  await assertOwnsDraftRequest(requestId, requesterId);
+  const bsb = normalizeBsb(bsbRaw);
+  assertValidAccountNumber(accountNumber);
+  await prisma.bankDetails.upsert({
+    where: { reimbursementRequestId: requestId },
+    create: { reimbursementRequestId: requestId, accountName, bsb, accountNumber },
+    update: { accountName, bsb, accountNumber },
+  });
+  await prisma.auditLogEntry.create({
+    data: {
+      reimbursementRequestId: requestId,
+      actorUserId: requesterId,
+      action: "BANK_DETAILS_UPDATED",
+    },
+  });
 }
 
 export async function addLineItem(
@@ -141,9 +183,8 @@ export async function addLineItem(
   amount: number,
 ): Promise<void> {
   // Read-then-write guard done as a plain read first (not inside the
-  // transaction below) -- matches the array-transaction pattern already
-  // proven in finance-data.ts, where each transaction member is an
-  // independent op rather than a sequentially-dependent interactive one.
+  // transaction below) -- keeps each transaction member an independent op
+  // rather than a sequentially-dependent interactive one.
   await assertOwnsDraftRequest(requestId, requesterId);
   // Atomic increment, not a re-fetch-and-sum -- avoids needing to read the
   // new line item back before updating the total, so both ops here are
