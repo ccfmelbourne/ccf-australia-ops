@@ -1,5 +1,4 @@
-// Shared between finance-data.ts and request-data.ts so both display money
-// the same way instead of duplicating the formatting rule.
+// Shared money-formatting rule so every display of an amount is consistent.
 export function formatAmount(amount: { toString(): string }): string {
   return Number(amount.toString()).toLocaleString("en-AU", {
     minimumFractionDigits: 2,

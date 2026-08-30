@@ -4,6 +4,7 @@ import { getDraftRequest } from "@/lib/request-data";
 import { REQUEST_TYPE_LABELS, MINISTRY_TYPE_LABELS } from "@/lib/request-types";
 import { LineItemManager } from "@/components/requests/LineItemManager";
 import { ReceiptManager } from "@/components/requests/ReceiptManager";
+import { BankDetailsManager } from "@/components/requests/BankDetailsManager";
 
 export const dynamic = "force-dynamic";
 
@@ -35,6 +36,8 @@ export default async function DraftRequestPage(props: PageProps<"/requests/[id]"
       />
 
       <ReceiptManager requestId={request.id} receipts={request.receipts} />
+
+      <BankDetailsManager requestId={request.id} bankDetails={request.bankDetails} />
     </div>
   );
 }
