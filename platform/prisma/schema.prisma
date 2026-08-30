@@ -34,8 +34,11 @@ enum RequestType {
   STATE_INTERNATIONAL_TRANSFER
 }
 
-// Mirrors the 10 "Ministry Type" values from the Track A pilot
-// (mvp/reimbursement-voucher/js/approval-rules.js MINISTRY_TYPE_TO_APPROVAL_GROUP).
+// Started as the Track A pilot's 10 values, mirrored 1:1. Split
+// COMMS_MEDIA_DGM into COMMS_MEDIA + DGM (2026-08-31): they have different
+// named approvers (Dexter Santiago vs. Moriz Manlangit) -- confirmed each
+// ministry type is assigned its own approver individually, not grouped as
+// the pilot's approval-rules.js did.
 enum MinistryType {
   ADMIN
   EXALT_LIVE_PROD
@@ -45,7 +48,8 @@ enum MinistryType {
   B1G
   ELEVATE
   EVENTS_HOST
-  COMMS_MEDIA_DGM
+  COMMS_MEDIA
+  DGM
   OCEANA_REGIONAL
 }
 
@@ -86,9 +90,10 @@ model User {
   picture   String?  // Google profile picture URL, display only
   createdAt DateTime @default(now())
 
-  requestsMade  ReimbursementRequest[] @relation("Requester")
-  approvals     RequiredApproval[]
-  auditEntries  AuditLogEntry[]
+  requestsMade        ReimbursementRequest[] @relation("Requester")
+  approvals           RequiredApproval[]
+  auditEntries        AuditLogEntry[]
+  approverAssignments ApproverAssignment[]
 }
 
 model ReimbursementRequest {
@@ -153,6 +158,29 @@ model RequiredApproval {
   comments               String?
 
   @@unique([reimbursementRequestId, role])
+}
+
+// Static reference data: which User fills a given approver role, either
+// for a specific ministry (MINISTRY_OVERSEER/COS1) or org-wide
+// (FINANCE_OVERSEER/REGIONAL_DIRECTOR, ministryType null). No COS2 rows
+// exist for any ministry -- confirmed there is currently no one in that
+// slot anywhere, not a gap in this table. Resolved once, at Submit time --
+// reassigning someone here does not retroactively change who's on an
+// already-submitted request's approval chain.
+//
+// Postgres unique constraints treat NULL as distinct from itself, so
+// @@unique([role, ministryType]) only actually enforces one-row-per-ministry
+// for the ministry-scoped rows -- the two org-wide rows rely on the seed
+// script being correct, not a DB constraint. Acceptable for this small,
+// internally-seeded table.
+model ApproverAssignment {
+  id           String        @id @default(cuid())
+  role         ApproverRole
+  ministryType MinistryType?
+  userId       String
+  user         User          @relation(fields: [userId], references: [id])
+
+  @@unique([role, ministryType])
 }
 
 model AuditLogEntry {

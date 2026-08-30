@@ -312,12 +312,17 @@ implementation. Differences worth folding back in:
   open.
 
 ## Open questions
-- Should `User` carry role/permission data directly, or is that a separate
-  `MinistryApproverAssignment`-style table (who currently holds Ministry Overseer/COS1/COS2/
-  Finance Overseer for each ministry group)? The pilot's `APPROVERS_BY_MINISTRY` reference table
-  is the starting data either way — this is about where it lives, not what it contains.
-- Multi-ministry-group membership: can one person hold a named role in more than one group at
-  once (the pilot's reference data doesn't show it today, but doesn't rule it out structurally)?
+- ~~Should `User` carry role/permission data directly, or is that a separate
+  `MinistryApproverAssignment`-style table?~~ **Resolved (slice 10, 2026-08-31):** a separate
+  `ApproverAssignment` table (`role`, optional `ministryType` — `null` for the two org-wide roles,
+  `userId`), not columns on `User`. Confirmed with the decision-maker directly (not the pilot's
+  `APPROVERS_BY_MINISTRY` grouping, which turned out to be wrong in places — e.g. Pastoral Care
+  has its own overseer, not Finance's): one named approver per *individual* ministry type (all
+  11), no COS2 anywhere currently, Finance Overseer/Regional Director each a single org-wide
+  person. See `.ai/WORKLOG.md` Slice 10 for the full mapping and reasoning.
+- Multi-ministry-group membership is moot now that assignment is per-ministry-type rather than
+  per-group — a person can already be the named approver for more than one ministry type (e.g.
+  Ross Callado covers Admin, Exalt/Live Prod, and Pastoral Care) without any special modeling.
 - Receipt handling: virus/malware scanning on upload, accepted file types/size limits — still not
   addressed. Slice 1 only *displays* receipts (`RequestDetailView`) via a seeded `storageKey`;
   there is no upload UI or upload action yet in the implementation to validate this against.

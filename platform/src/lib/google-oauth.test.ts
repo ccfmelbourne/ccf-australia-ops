@@ -18,6 +18,7 @@ test("buildAuthorizationRequest points at Google's authorization endpoint with t
   assert.equal(url.searchParams.get("state"), state);
   assert.ok(url.searchParams.get("scope")?.includes("email"));
   assert.ok(url.searchParams.get("code_challenge"));
+  assert.equal(url.searchParams.get("prompt"), "select_account");
   assert.ok(state.length > 0);
   assert.ok(codeVerifier.length > 0);
 });

@@ -20,9 +20,11 @@ export const REQUEST_TYPE_LABELS: Record<RequestTypeValue, string> = {
   STATE_INTERNATIONAL_TRANSFER: "State/International Transfer",
 };
 
-// Mirrors the 10 "Ministry Type" values from the Track A pilot
-// (mvp/reimbursement-voucher/js/approval-rules.js MINISTRY_TYPE_TO_APPROVAL_GROUP),
-// same enum already used in schema.prisma.
+// Started as the Track A pilot's 10 values, mirrored 1:1
+// (mvp/reimbursement-voucher/js/approval-rules.js MINISTRY_TYPE_TO_APPROVAL_GROUP).
+// Split COMMS_MEDIA_DGM into COMMS_MEDIA + DGM (2026-08-31): confirmed each
+// ministry type is assigned its own named approver individually, and these
+// two have different people (Dexter Santiago vs. Moriz Manlangit).
 export const MINISTRY_TYPES = [
   "ADMIN",
   "EXALT_LIVE_PROD",
@@ -32,7 +34,8 @@ export const MINISTRY_TYPES = [
   "B1G",
   "ELEVATE",
   "EVENTS_HOST",
-  "COMMS_MEDIA_DGM",
+  "COMMS_MEDIA",
+  "DGM",
   "OCEANA_REGIONAL",
 ] as const;
 export type MinistryTypeValue = (typeof MINISTRY_TYPES)[number];
@@ -46,14 +49,16 @@ export const MINISTRY_TYPE_LABELS: Record<MinistryTypeValue, string> = {
   B1G: "B1G",
   ELEVATE: "Elevate",
   EVENTS_HOST: "Events / Host",
-  COMMS_MEDIA_DGM: "Comms / Media / DGM",
+  COMMS_MEDIA: "Comms / Media",
+  DGM: "DGM",
   OCEANA_REGIONAL: "Oceana Regional",
 };
 
-// Mirrors the RequestStatus enum (schema.prisma). Only DRAFT and
-// IN_APPROVAL are reachable through the app today (no approver UI or
-// Finance-side transitions exist yet); the rest are included for
-// completeness so the requests table never shows a raw enum value.
+// Mirrors the RequestStatus enum (schema.prisma). Only DRAFT, IN_APPROVAL,
+// APPROVED, and REJECTED_RETURNED are reachable through the app today
+// (Finance-side transitions no longer exist -- Finance retired from the
+// app entirely); the rest are included for completeness so the requests
+// table never shows a raw enum value.
 export const REQUEST_STATUS_LABELS: Record<string, string> = {
   DRAFT: "Draft",
   SUBMITTED: "Submitted",

@@ -3,6 +3,7 @@ import { formatAmount } from "@/lib/money";
 import { getReceiptDownloadUrl } from "@/lib/receipt-storage";
 import { normalizeBsb, formatBsb, assertValidAccountNumber } from "@/lib/bank-details";
 import { getTier, getRequiredApproverRoles } from "@/lib/approval-routing";
+import type { ApproverRoleValue } from "@/lib/approval-routing";
 import type { RequestTypeValue, MinistryTypeValue } from "@/lib/request-types";
 
 // Uses array-form prisma.$transaction([...]) throughout, not the
@@ -207,14 +208,31 @@ export async function deleteDraftRequest(
   return { storageKeys: receipts.map((r) => r.storageKey) };
 }
 
+// FINANCE_OVERSEER/REGIONAL_DIRECTOR are assigned org-wide (ministryType:
+// null in ApproverAssignment); MINISTRY_OVERSEER/COS1 are assigned per the
+// request's own ministry. COS2 is never looked up -- no assignment exists
+// for it anywhere (confirmed: no one currently holds a second-COS slot for
+// any ministry), so it's always left unassigned.
+const ORG_WIDE_ROLES = new Set(["FINANCE_OVERSEER", "REGIONAL_DIRECTOR"]);
+
+async function resolveApprover(
+  role: ApproverRoleValue,
+  ministryType: MinistryTypeValue,
+): Promise<string | null> {
+  if (role === "COS2") return null;
+  const assignment = await prisma.approverAssignment.findFirst({
+    where: ORG_WIDE_ROLES.has(role) ? { role, ministryType: null } : { role, ministryType },
+  });
+  return assignment?.userId ?? null;
+}
+
 // DRAFT -> IN_APPROVAL. Generates one RequiredApproval row per role the
-// confirmed tier rules require (approval-routing.ts); approverUserId stays
-// null -- resolving WHO fills each role is a separate, later slice (the
-// pilot's own named-approver reference data has real gaps: no emails, and
-// some role slots have no named person at all). Goes straight to
-// IN_APPROVAL rather than SUBMITTED, since the required-approval rows are
-// generated in this same atomic step -- SUBMITTED would be a fleeting label
-// with no distinct behavior of its own.
+// confirmed tier rules require (approval-routing.ts), with approverUserId
+// resolved from ApproverAssignment where one exists (left null otherwise --
+// e.g. COS2, which currently has no assignment for any ministry). Goes
+// straight to IN_APPROVAL rather than SUBMITTED, since the required-approval
+// rows are generated in this same atomic step -- SUBMITTED would be a
+// fleeting label with no distinct behavior of its own.
 export async function submitRequest(requestId: string, requesterId: string): Promise<void> {
   const request = await prisma.reimbursementRequest.findFirst({
     where: { id: requestId, requesterId, status: "DRAFT" },
@@ -229,17 +247,28 @@ export async function submitRequest(requestId: string, requesterId: string): Pro
   if (!request.bankDetails) {
     throw new Error("Add bank details before submitting.");
   }
-  if (request.receipts.length === 0) {
-    throw new Error("Attach at least one receipt before submitting.");
-  }
+  // TODO: receipts were made required, then deliberately relaxed back to
+  // optional (2026-08-31) -- decision-maker call to revert to required
+  // before the official testing phase begins, not before then.
+  // if (request.receipts.length === 0) {
+  //   throw new Error("Attach at least one receipt before submitting.");
+  // }
 
   const tier = getTier(Number(request.totalAmount));
   const roles = getRequiredApproverRoles(tier);
+  const approverUserIds = await Promise.all(
+    roles.map((role) => resolveApprover(role, request.ministryType)),
+  );
 
   await prisma.$transaction([
-    ...roles.map((role) =>
+    ...roles.map((role, i) =>
       prisma.requiredApproval.create({
-        data: { reimbursementRequestId: requestId, role, status: "PENDING" },
+        data: {
+          reimbursementRequestId: requestId,
+          role,
+          status: "PENDING",
+          approverUserId: approverUserIds[i],
+        },
       }),
     ),
     prisma.reimbursementRequest.update({
