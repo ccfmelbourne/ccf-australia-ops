@@ -1,6 +1,5 @@
 "use server";
 
-import { redirect } from "next/navigation";
 import { z } from "zod";
 import { getCurrentUserId } from "@/lib/user-session";
 import {
@@ -12,6 +11,9 @@ import {
   removeReceiptRecord,
   getReceiptStorageKeyForOwner,
   upsertBankDetails,
+  updateDraftRequestDetails,
+  deleteDraftRequest,
+  submitRequest,
 } from "@/lib/request-data";
 import { REQUEST_TYPES, MINISTRY_TYPES } from "@/lib/request-types";
 import {
@@ -23,26 +25,25 @@ import {
 } from "@/lib/receipt-storage";
 import { receiptExtractionService, type ReceiptExtractionResult } from "@/lib/receipt-extraction";
 
-const createDraftSchema = z.object({
+const requestDetailsSchema = z.object({
   requestType: z.enum(REQUEST_TYPES),
   ministryType: z.enum(MINISTRY_TYPES),
 });
 
-export async function createDraftRequestAction(
-  _prevState: { error: string | null },
-  formData: FormData,
-): Promise<{ error: string | null }> {
+// Returns the new id instead of redirecting: the drawer opens for the new
+// draft in place on the same /requests page, it never navigates away.
+export async function createDraftRequestForDrawerAction(
+  requestType: string,
+  ministryType: string,
+): Promise<{ ok: boolean; id?: string; error?: string }> {
   const userId = await getCurrentUserId();
   if (!userId) {
-    redirect("/sign-in");
+    return { ok: false, error: "Not signed in." };
   }
 
-  const parsed = createDraftSchema.safeParse({
-    requestType: formData.get("requestType"),
-    ministryType: formData.get("ministryType"),
-  });
+  const parsed = requestDetailsSchema.safeParse({ requestType, ministryType });
   if (!parsed.success) {
-    return { error: parsed.error.issues[0]?.message ?? "Invalid input" };
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input" };
   }
 
   const { id } = await createDraftRequest(
@@ -50,7 +51,66 @@ export async function createDraftRequestAction(
     parsed.data.requestType,
     parsed.data.ministryType,
   );
-  redirect(`/requests/${id}`);
+  return { ok: true, id };
+}
+
+export async function updateRequestDetailsAction(
+  requestId: string,
+  requestType: string,
+  ministryType: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const userId = await getCurrentUserId();
+  if (!userId) {
+    return { ok: false, error: "Not signed in." };
+  }
+
+  const parsed = requestDetailsSchema.safeParse({ requestType, ministryType });
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input" };
+  }
+
+  try {
+    await updateDraftRequestDetails(
+      requestId,
+      userId,
+      parsed.data.requestType,
+      parsed.data.ministryType,
+    );
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Something went wrong." };
+  }
+}
+
+export async function deleteRequestAction(
+  requestId: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const userId = await getCurrentUserId();
+  if (!userId) {
+    return { ok: false, error: "Not signed in." };
+  }
+  try {
+    const { storageKeys } = await deleteDraftRequest(requestId, userId);
+    await Promise.all(storageKeys.map((key) => deleteReceipt(key)));
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Something went wrong." };
+  }
+}
+
+export async function submitRequestAction(
+  requestId: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const userId = await getCurrentUserId();
+  if (!userId) {
+    return { ok: false, error: "Not signed in." };
+  }
+  try {
+    await submitRequest(requestId, userId);
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Something went wrong." };
+  }
 }
 
 const lineItemSchema = z.object({

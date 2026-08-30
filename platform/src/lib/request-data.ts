@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { formatAmount } from "@/lib/money";
 import { getReceiptDownloadUrl } from "@/lib/receipt-storage";
 import { normalizeBsb, formatBsb, assertValidAccountNumber } from "@/lib/bank-details";
+import { getTier, getRequiredApproverRoles } from "@/lib/approval-routing";
 import type { RequestTypeValue, MinistryTypeValue } from "@/lib/request-types";
 
 // Uses array-form prisma.$transaction([...]) throughout, not the
@@ -44,6 +45,16 @@ export interface DraftRequestView {
   lineItems: DraftLineItemView[];
   receipts: DraftReceiptView[];
   bankDetails: DraftBankDetailsView | null;
+}
+
+export interface RequestListItemView {
+  id: string;
+  voucherNo: string;
+  requestType: RequestTypeValue;
+  ministryType: MinistryTypeValue;
+  totalAmount: string; // formatted
+  status: string;
+  createdAt: string; // ISO date
 }
 
 // storageKey is "receipts/{requestId}/{uuid}-{safeName}" (buildReceiptStorageKey
@@ -146,6 +157,104 @@ export async function getDraftRequest(
         }
       : null,
   };
+}
+
+// All statuses (not DRAFT-only like getDraftRequest) -- this is the
+// requester's own landing page, listing everything they've ever created.
+export async function getMyRequests(requesterId: string): Promise<RequestListItemView[]> {
+  const requests = await prisma.reimbursementRequest.findMany({
+    where: { requesterId },
+    orderBy: { createdAt: "desc" },
+  });
+  return requests.map((r) => ({
+    id: r.id,
+    voucherNo: r.voucherNo,
+    requestType: r.requestType,
+    ministryType: r.ministryType,
+    totalAmount: formatAmount(r.totalAmount),
+    status: r.status,
+    createdAt: r.createdAt.toISOString(),
+  }));
+}
+
+export async function updateDraftRequestDetails(
+  requestId: string,
+  requesterId: string,
+  requestType: RequestTypeValue,
+  ministryType: MinistryTypeValue,
+): Promise<void> {
+  await assertOwnsDraftRequest(requestId, requesterId);
+  await prisma.reimbursementRequest.update({
+    where: { id: requestId },
+    data: { requestType, ministryType },
+  });
+}
+
+// Deletes the request row itself -- LineItem/Receipt/BankDetails/
+// AuditLogEntry all cascade via the schema's onDelete: Cascade. Returns the
+// receipt storage keys first so the caller can delete the R2 objects,
+// since R2 isn't part of a Postgres cascade (mirrors removeReceiptRecord's
+// existing return-the-key-don't-reach-into-receipt-storage pattern).
+export async function deleteDraftRequest(
+  requestId: string,
+  requesterId: string,
+): Promise<{ storageKeys: string[] }> {
+  await assertOwnsDraftRequest(requestId, requesterId);
+  const receipts = await prisma.receipt.findMany({
+    where: { reimbursementRequestId: requestId },
+  });
+  await prisma.reimbursementRequest.delete({ where: { id: requestId } });
+  return { storageKeys: receipts.map((r) => r.storageKey) };
+}
+
+// DRAFT -> IN_APPROVAL. Generates one RequiredApproval row per role the
+// confirmed tier rules require (approval-routing.ts); approverUserId stays
+// null -- resolving WHO fills each role is a separate, later slice (the
+// pilot's own named-approver reference data has real gaps: no emails, and
+// some role slots have no named person at all). Goes straight to
+// IN_APPROVAL rather than SUBMITTED, since the required-approval rows are
+// generated in this same atomic step -- SUBMITTED would be a fleeting label
+// with no distinct behavior of its own.
+export async function submitRequest(requestId: string, requesterId: string): Promise<void> {
+  const request = await prisma.reimbursementRequest.findFirst({
+    where: { id: requestId, requesterId, status: "DRAFT" },
+    include: { lineItems: true, bankDetails: true, receipts: true },
+  });
+  if (!request) {
+    throw new Error("Draft request not found.");
+  }
+  if (request.lineItems.length === 0) {
+    throw new Error("Add at least one line item before submitting.");
+  }
+  if (!request.bankDetails) {
+    throw new Error("Add bank details before submitting.");
+  }
+  if (request.receipts.length === 0) {
+    throw new Error("Attach at least one receipt before submitting.");
+  }
+
+  const tier = getTier(Number(request.totalAmount));
+  const roles = getRequiredApproverRoles(tier);
+
+  await prisma.$transaction([
+    ...roles.map((role) =>
+      prisma.requiredApproval.create({
+        data: { reimbursementRequestId: requestId, role, status: "PENDING" },
+      }),
+    ),
+    prisma.reimbursementRequest.update({
+      where: { id: requestId },
+      data: { status: "IN_APPROVAL", submittedAt: new Date() },
+    }),
+  ]);
+  await prisma.auditLogEntry.create({
+    data: {
+      reimbursementRequestId: requestId,
+      actorUserId: requesterId,
+      action: "SUBMITTED",
+      details: { tier, requiredRoles: roles },
+    },
+  });
 }
 
 // A single upsert (not separate add/remove) since BankDetails is 1:1 --
