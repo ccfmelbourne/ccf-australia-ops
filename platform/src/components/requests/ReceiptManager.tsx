@@ -2,6 +2,7 @@
 
 import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import {
   uploadReceiptAction,
   removeReceiptAction,
@@ -43,7 +44,6 @@ export function ReceiptManager({
   const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isPending, startTransition] = useTransition();
-  const [error, setError] = useState<string | null>(null);
   // The suggestion card is purely a review step -- nothing is added as a
   // real line item until "Confirm" is clicked, and it never auto-populates
   // financial data without that explicit confirmation.
@@ -53,7 +53,6 @@ export function ReceiptManager({
   function handleFileChosen(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
-    setError(null);
     const formData = new FormData();
     formData.set("file", file);
     startTransition(async () => {
@@ -61,7 +60,7 @@ export function ReceiptManager({
       if (result.ok) {
         router.refresh();
       } else {
-        setError(result.error ?? "Something went wrong.");
+        toast.error(result.error ?? "Something went wrong.");
       }
       // Clear so choosing the same file again still fires onChange.
       if (fileInputRef.current) fileInputRef.current.value = "";
@@ -69,19 +68,17 @@ export function ReceiptManager({
   }
 
   function handleRemove(receiptId: string) {
-    setError(null);
     startTransition(async () => {
       const result = await removeReceiptAction(receiptId);
       if (result.ok) {
         router.refresh();
       } else {
-        setError(result.error ?? "Something went wrong.");
+        toast.error(result.error ?? "Something went wrong.");
       }
     });
   }
 
   function handleScan(receiptId: string) {
-    setError(null);
     setSuggestion(null);
     setScanningReceiptId(receiptId);
     startTransition(async () => {
@@ -90,7 +87,7 @@ export function ReceiptManager({
       if (result.ok && result.result) {
         setSuggestion(toSuggestionState(receiptId, result.result));
       } else {
-        setError(result.error ?? "Something went wrong.");
+        toast.error(result.error ?? "Something went wrong.");
       }
     });
   }
@@ -99,14 +96,13 @@ export function ReceiptManager({
     if (!suggestion) return;
     const description = suggestion.merchant.trim();
     if (!description || Number(suggestion.amount) <= 0) return;
-    setError(null);
     startTransition(async () => {
       const result = await addLineItemAction(requestId, description, suggestion.amount);
       if (result.ok) {
         setSuggestion(null);
         router.refresh();
       } else {
-        setError(result.error ?? "Something went wrong.");
+        toast.error(result.error ?? "Something went wrong.");
       }
     });
   }
@@ -247,7 +243,6 @@ export function ReceiptManager({
           {isPending ? "Uploading…" : "Upload a receipt"}
         </button>
         <p className="text-xs text-slate-500">PDF, JPEG, PNG, or HEIC. Max 10MB.</p>
-        {error && <p className="text-sm text-red-600">{error}</p>}
       </div>
     </section>
   );

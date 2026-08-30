@@ -556,3 +556,64 @@ implementing Submit, which needed the approval-routing logic to decide required 
   (`COS1`/`COS2`/`FINANCE_OVERSEER`/`REGIONAL_DIRECTOR`) and the table correctly showed
   `IN_APPROVAL` with Edit/Delete no longer available; confirmed the drawer renders full-width on
   a 375px viewport.
+
+## Slice 10: Approver Assignment + Approver-Facing UI (2026-08-31)
+The decision-maker supplied real approver identities across a series of exchanges, correcting
+several assumptions this project had carried since the pilot: approvers are assigned **per
+individual ministry type** (11, not the pilot's collapsed 5-group scheme — e.g. Pastoral Care has
+its own overseer, distinct from Finance/NxtGen despite the pilot lumping them together), **there
+is no COS2 anywhere** (one named person per ministry fills both `MINISTRY_OVERSEER` and `COS1`,
+as two separate approval rows — a pre-existing gap in the pilot's own data, not something new),
+and **Finance Overseer**/**Regional Director** are each a single **org-wide** person, not
+per-ministry. `"Comms / Media / DGM"` also split into two ministry types (`COMMS_MEDIA`/`DGM`)
+since they have different named approvers.
+
+- `ApproverAssignment` model (role + optional `ministryType`, `null` = org-wide) + `prisma/seed.ts`
+  extended to idempotently seed the 9 named `User` rows and 24 assignment rows (11 ministries × 2
+  roles + 2 org-wide), run unconditionally near the top of `main()` — confirmed the existing
+  demo-request seed block's early-return would otherwise silently skip anything placed after it.
+  Vamie Pinlac (no longer a ministry overseer) is seeded too, ready for the future tier-4-override
+  slice she's still relevant to.
+- **Real migration-generator bug found and fixed:** `prisma migrate diff`'s auto-generated SQL for
+  splitting the `MinistryType` enum tried to `ALTER TABLE "ApproverAssignment"` *before* that
+  table existed (it's created later in the same file) — a genuine ordering bug in Prisma's diff
+  output for this "new table + simultaneous enum change" combination, not something we did wrong.
+  Fixed by hand-editing the generated migration.sql to drop that erroneous line (a brand-new empty
+  table doesn't need a data-preserving column-type conversion).
+- **Found before migrating, worth recording:** 3 existing rows in the real database still used
+  `COMMS_MEDIA_DGM` (the reseedable demo row, plus two of this session's own live-test artifacts).
+  Deleted them as part of the migration rather than deciding an arbitrary mapping for test debris.
+- `submitRequest` (`request-data.ts`) now resolves `approverUserId` via `ApproverAssignment` —
+  `MINISTRY_OVERSEER`/`COS1` by the request's own ministry, `FINANCE_OVERSEER`/`REGIONAL_DIRECTOR`
+  org-wide, `COS2` never looked up (no assignment exists for it anywhere, by design).
+- New `platform/src/lib/approval-data.ts`: `getPendingApprovalsForUser` (deliberately excludes
+  bank details — spec 0002's explicit access restriction) and `decideApproval` (a single rejection
+  ends the chain → `REJECTED_RETURNED`; the request only moves to `APPROVED` once every required
+  row is `APPROVED`). New `/approvals` route + `ApprovalsTable.tsx` (expandable rows, comment
+  required to reject).
+- **Mid-slice UX change, implemented same session:** the decision-maker asked for approvals and
+  requests to land on **one combined page** instead of two routes with nav switching (since one
+  person can be both a requester and an approver). `/requests` now renders the approvals table
+  above the requests table; `/approvals` became a one-line redirect to `/requests` (kept, not
+  deleted, so any existing link still lands somewhere sensible) rather than removed outright.
+  `AppHeader.tsx` (new, shared between the two — since removed — layout files) simplified back
+  down once the nav between them was no longer needed.
+- Verified: `tsc --noEmit`, `next lint`, `node --test` (26/26) clean, `next build` (route list
+  shows `/approvals` as a static redirect, `/requests` unchanged), `storybook build` clean.
+  `npx tsx prisma/seed.ts` run twice against the real database confirmed idempotent (24
+  `ApproverAssignment` rows, 9 users, no duplicates). Live: a tier-2 Admin request correctly
+  produced 2 approval rows both assigned to Ross Callado, visible on his `/approvals` view with
+  zero bank-detail fields anywhere on the page, and approving both moved the request to `APPROVED`;
+  a tier-4 Oceana request correctly assigned `COS1`/`REGIONAL_DIRECTOR` to Ryan Escobar and
+  `FINANCE_OVERSEER` to Joel Jerez with `COS2` left unassigned, and Joel rejecting it immediately
+  moved the request to `REJECTED_RETURNED` and hid the now-moot pending rows from Ryan's view.
+- **Follow-up (2026-08-31, same day):** `ReceiptManager`'s upload/remove/scan/confirm errors now
+  surface via `sonner` toasts (`<Toaster/>` was already mounted in the root layout but nothing
+  called it, since its only prior caller was Finance's status-transition UI, removed in slice 8)
+  instead of inline red text — the inline version rendered errors from per-row actions (Remove,
+  Scan) far below the row that triggered them, near the unrelated upload button. Scoped to just
+  `ReceiptManager` for now, not the other forms, which still use inline text.
+- **Follow-up (2026-08-31, same day):** the "at least one receipt required before submitting"
+  check added in slice 9 is temporarily relaxed back to optional (commented out, not deleted) —
+  decision-maker call to revert it to required before the official testing phase begins, same
+  pattern as the deferred BankDetails field-level encryption.

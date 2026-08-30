@@ -35,6 +35,11 @@ export function buildAuthorizationRequest(): {
     "profile",
     "email",
   ]);
+  // Without this, Google silently reuses whichever Google account is
+  // already active in the browser instead of showing the account picker --
+  // signing out of our own app doesn't sign the browser out of Google, so
+  // "sign in with a different account" would otherwise be impossible.
+  url.searchParams.set("prompt", "select_account");
   return { url, state, codeVerifier };
 }
 
