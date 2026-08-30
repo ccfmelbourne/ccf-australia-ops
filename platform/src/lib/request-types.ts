@@ -49,3 +49,19 @@ export const MINISTRY_TYPE_LABELS: Record<MinistryTypeValue, string> = {
   COMMS_MEDIA_DGM: "Comms / Media / DGM",
   OCEANA_REGIONAL: "Oceana Regional",
 };
+
+// Mirrors the RequestStatus enum (schema.prisma). Only DRAFT and
+// IN_APPROVAL are reachable through the app today (no approver UI or
+// Finance-side transitions exist yet); the rest are included for
+// completeness so the requests table never shows a raw enum value.
+export const REQUEST_STATUS_LABELS: Record<string, string> = {
+  DRAFT: "Draft",
+  SUBMITTED: "Submitted",
+  IN_APPROVAL: "In Approval",
+  APPROVED: "Approved",
+  READY_FOR_PROCESSING: "Ready for Processing",
+  NEEDS_CLARIFICATION: "Needs Clarification",
+  PROCESSING: "Processing",
+  PROCESSED: "Processed",
+  REJECTED_RETURNED: "Rejected / Returned",
+};

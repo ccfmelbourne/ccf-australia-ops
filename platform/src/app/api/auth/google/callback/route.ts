@@ -38,9 +38,5 @@ export async function GET(request: NextRequest) {
 
   await createUserSession(user.id);
 
-  // Land back on sign-in itself, which shows a signed-in state (with a
-  // link into /requests/new) instead of the sign-in button once a session
-  // exists. Deliberately NOT "/", which unconditionally redirects to
-  // Finance's own unrelated login.
-  return NextResponse.redirect(new URL("/sign-in", request.url));
+  return NextResponse.redirect(new URL("/requests", request.url));
 }

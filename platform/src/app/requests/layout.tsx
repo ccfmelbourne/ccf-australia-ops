@@ -23,7 +23,7 @@ export default async function RequestsLayout({ children }: { children: React.Rea
           </button>
         </form>
       </header>
-      <main className="mx-auto max-w-2xl p-6">{children}</main>
+      <main className="mx-auto max-w-4xl p-6">{children}</main>
     </div>
   );
 }

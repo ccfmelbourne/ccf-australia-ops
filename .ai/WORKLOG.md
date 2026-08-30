@@ -391,11 +391,13 @@ dormant), and the email includes **bank details and all other form details**.
 This retires the entire Finance V1 slice-1/2/3 system and means Bank Details must exist before
 that eventual email can ever be sent, since Finance has no other way to see the payment account.
 Updated roadmap: (4) Bank details, (5) remove Finance login — both this slice — then (6) My
-Requests list (still deferred), (7) approval-routing logic, (8) submit action, (9) approver UI,
-(10) tier-4 override, (11) Request Changes/re-approval, (12) on full approval, render the form +
-receipts + bank details and email Finance (replaces the old Finance-queue terminal step; a
-useful reference for "the correct form" layout found in the pilot's own HTML-voucher-for-email
-code, `mvp/reimbursement-voucher/js/app.js` around the `Bank Details for Payment` section).
+Requests list, (7) approval-routing logic, (8) submit action — all three done in Slice 9, sooner
+than originally sequenced, once the decision-maker's table+drawer redesign made them the natural
+next increment — (9) approver UI, (10) tier-4 override, (11) Request Changes/re-approval, (12) on
+full approval, render the form + receipts + bank details and email Finance (replaces the old
+Finance-queue terminal step; a useful reference for "the correct form" layout found in the
+pilot's own HTML-voucher-for-email code, `mvp/reimbursement-voucher/js/app.js` around the
+`Bank Details for Payment` section).
 
 ## Slice 8: Bank Details + Retire Finance Login (2026-08-30)
 - `BankDetails` model added (1:1 with `ReimbursementRequest`, per spec 0002's already-sketched
@@ -491,3 +493,66 @@ code, `mvp/reimbursement-voucher/js/app.js` around the `Bank Details for Payment
   `git.deploymentEnabled` did **not** free a slot (only actual branch deletion did), merging the
   Track A pilot branch's full history into `main` via PR #12 so `pilot/reimbursement-voucher-test`
   could be deleted without losing it — it's the same code, just no longer a separate branch.
+
+## Slice 9: My Requests Table + Drawer + Submit/Approval-Routing (2026-08-30)
+The decision-maker noticed the draft request page had no Submit button and no way to see past
+requests — closing that gap meant redesigning how a requester creates/edits a request (a table +
+responsive drawer, replacing separate `/requests/new`/`/requests/[id]` pages) and finally
+implementing Submit, which needed the approval-routing logic to decide required approver roles.
+
+- **UX, confirmed with the decision-maker across several exchanges:** land on a table of all the
+  requester's own requests after sign-in; a "Create Request" button opens a responsive drawer
+  (wide panel on desktop, full-screen sheet on small screens — `w-full max-w-xl` gives that for
+  free, no separate breakpoint needed) with only **Submit** and **Close** (no Cancel/Save, since
+  every field already auto-saves as it's entered); each table row gets **Edit**/**Delete**
+  (`DRAFT` only).
+- `platform/src/app/requests/page.tsx` + `RequestsTable.tsx` + `RequestDrawer.tsx`: the drawer's
+  content is driven by a `?open=<id>` search param rather than a separate route/client-fetched
+  state — this was a deliberate architecture choice found during implementation, not the original
+  plan (which assumed no deep link at all): it means the existing `router.refresh()` calls
+  already inside `LineItemManager`/`ReceiptManager`/`BankDetailsManager` keep working completely
+  unchanged, since `router.refresh()` re-runs the page's server component (which re-reads the
+  search param and refetches), instead of needing to touch those three working components to add
+  a refetch callback. A bonus: this also restores a shareable/bookmarkable link to a specific
+  draft, which the original plan had assumed was being given up.
+- **Real bug found and fixed via live testing:** the first version of the drawer's "create" step
+  called `createDraftRequestForDrawerAction` on every dropdown change (so picking type then
+  ministry felt fully auto-saving, matching the rest of the drawer). Rapid changes to both
+  dropdowns before the first call resolved raced into **two separate drafts** — only the second
+  became the one being edited, the first silently orphaned with no way to reach it except
+  directly in the database. Fixed by creating the draft **once**, immediately, with sensible
+  defaults the moment the drawer opens, then transitioning straight into the same edit view —
+  changing type/ministry there is a single field's own independent update call, which has no such
+  race. A `useRef` guard (not just React state) prevents Strict Mode's dev-only double-invoke of
+  the creating effect from firing a second create.
+- **Schema:** added `onDelete: Cascade` to `LineItem`/`Receipt`/`BankDetails`/`AuditLogEntry`'s
+  relations to `ReimbursementRequest` (previously the Postgres default `RESTRICT`, hit directly as
+  a real foreign-key error while writing this slice's own test cleanup code) so
+  `deleteDraftRequest` can issue one `prisma.reimbursementRequest.delete()` after explicitly
+  deleting each receipt's R2 object first (R2 isn't part of a Postgres cascade).
+- `platform/src/lib/approval-routing.ts` + test: pure `getTier`/`getRequiredApproverRoles`.
+  Checked the pilot's tested reference (`approval-rules.js`) directly rather than re-deriving the
+  rules from memory, and found two things worth recording: its tier-4 rule is the
+  **known-outdated** Oceana-only Regional Director rule (the confirmed rule, already recorded
+  earlier in this project's history, applies to every ministry group — implemented that way, not
+  the pilot's literal logic); and its named-approver reference data has real gaps (names only, no
+  emails, and several role slots like Finance Overseer have no named person at all for *any*
+  group). Confirmed with the decision-maker: `submitRequest` creates the correct
+  `RequiredApproval` rows (role + tier) but leaves `approverUserId` `null` — resolving *who* fills
+  each role is a separate, later slice (the approver-facing UI), not decided here. `submitRequest`
+  goes straight to `IN_APPROVAL` (not `SUBMITTED`), since the approval rows are generated in the
+  same atomic step — `SUBMITTED` would be a fleeting label with no distinct behavior.
+- Also removed: `/requests/new`, `/requests/[id]`, `CreateRequestForm.tsx` (fully replaced, not
+  kept alongside); `sign-in/page.tsx` now redirects straight to `/requests` once signed in
+  (instead of an inline "you're signed in" block), and the OAuth callback redirects to
+  `/requests` directly instead of `/sign-in`.
+- Verified: `tsc --noEmit`, `next lint`, `node --test` (26/26, 2 new for `approval-routing.ts`),
+  `next build` (route list confirms `/requests` replaced the old two routes), and
+  `storybook build` all clean. Live, with a real signed-in Google account and a second throwaway
+  account: full flow end-to-end (create → fill in line items/receipts/bank details → close → row
+  shows `DRAFT` with Edit/Delete → Edit reopens pre-filled → Delete removes it from the database)
+  confirmed exactly once, no orphaned duplicate; a second request at $6,000 (tier 4) submitted
+  correctly created exactly the 4 expected unassigned `RequiredApproval` rows
+  (`COS1`/`COS2`/`FINANCE_OVERSEER`/`REGIONAL_DIRECTOR`) and the table correctly showed
+  `IN_APPROVAL` with Edit/Delete no longer available; confirmed the drawer renders full-width on
+  a 375px viewport.
