@@ -1,16 +1,25 @@
 import { Document, Page, View, Text, Image, StyleSheet, renderToBuffer } from "@react-pdf/renderer";
 import { PDFDocument } from "pdf-lib";
-import { REQUEST_TYPE_LABELS, MINISTRY_TYPE_LABELS } from "@/lib/request-types";
+import { REQUEST_TYPES, REQUEST_TYPE_LABELS, MINISTRY_TYPE_LABELS } from "@/lib/request-types";
 import { APPROVER_ROLE_LABELS } from "@/lib/approval-routing";
-import type { ApprovedRequestDetail } from "@/lib/request-data";
+import type { ApproverRoleValue } from "@/lib/approval-routing";
+import type { ApprovedRequestDetail, ApproverDirectory } from "@/lib/request-data";
 
 // The official Finance-facing document for an approved request -- once
 // Finance no longer logs into the app, this PDF (not the email body, not a
 // link) is the artifact Finance actually acts on to process payment. Layout
-// mirrors the Track A pilot's voucher (mvp/reimbursement-voucher/js/app.js's
-// downloadWord/downloadPDF): header, line items + total, bank details,
-// approval summary. @react-pdf/renderer has no real HTML <table> -- rows
-// below are plain flexbox Views styled to look like one.
+// deliberately mirrors CCF Australia's actual paper voucher (shared by the
+// decision-maker as CCOMMS-Reibursement_June292026_signed.pdf), not just the
+// Track A pilot's simplified HTML version: org header, request-type
+// checkboxes, a line-items table alongside a ministry checklist, a
+// requisitioned-by/bank-details row, per-role signature columns, the
+// Approval Limit tier legend, and a live Ministry->Overseer directory.
+// Deliberately dropped from the real form: the WEST/NORTH region checkboxes
+// (no region concept exists anywhere in this app's data model -- adding one
+// would be a real new feature, not a formatting change) and the "If paid in
+// cash" section (this app only ever captures bank transfer details).
+// @react-pdf/renderer has no real HTML <table> or checkbox input -- rows and
+// checkboxes below are plain flexbox Views styled to look like them.
 //
 // Receipts are embedded INTO this same PDF, not just left as separate email
 // attachments -- Finance's official document should be openable on its own
@@ -24,7 +33,10 @@ import type { ApprovedRequestDetail } from "@/lib/request-data";
 // HEIC receipts can't be embedded by either (no HEIC decoder here, same
 // limitation the Vision OCR feature already accepts) -- they're listed by
 // name on the voucher page as a pointer to the separate raw attachment,
-// which the caller (notifications.ts) still includes either way.
+// which the caller (notifications.ts) still includes either way. Approver
+// signatures are small PNGs captured client-side (ApprovalDrawer.tsx's
+// signature pad) -- always PNG, so they go through the same Buffer-accepting
+// Image source, no format detection needed like receipts.
 
 export interface ReceiptImageInput {
   filename: string;
@@ -38,134 +50,177 @@ export interface ReceiptPdfInput {
 }
 
 const styles = StyleSheet.create({
-  page: { padding: 32, fontSize: 10, fontFamily: "Helvetica" },
-  title: { fontSize: 16, marginBottom: 4 },
-  voucherNo: { fontSize: 11, color: "#444444", marginBottom: 16 },
-  section: { marginBottom: 16 },
+  page: { padding: 32, fontSize: 9, fontFamily: "Helvetica" },
+
+  topRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10 },
+  orgName: { fontSize: 14, fontFamily: "Helvetica-Bold" },
+  topRight: { alignItems: "flex-end" },
+  topRightLine: { fontSize: 9, marginBottom: 2 },
+
+  section: { marginBottom: 14 },
   sectionTitle: {
-    fontSize: 11,
+    fontSize: 10,
     fontFamily: "Helvetica-Bold",
     marginBottom: 6,
     textTransform: "uppercase",
     color: "#333333",
   },
-  headerGrid: { flexDirection: "row", flexWrap: "wrap" },
-  headerField: { width: "50%", marginBottom: 6 },
-  fieldLabel: { color: "#666666", fontSize: 9 },
-  fieldValue: { fontSize: 10 },
-  row: {
-    flexDirection: "row",
-    borderBottomWidth: 1,
-    borderBottomColor: "#dddddd",
-    paddingVertical: 4,
+
+  checkboxRow: { flexDirection: "row", flexWrap: "wrap" },
+  checkboxItem: { flexDirection: "row", alignItems: "center", marginRight: 14, marginBottom: 4 },
+  // A filled vs. empty square, not a text glyph inside the box -- a glyph
+  // that small (needed to fit a 9x9 box) turned out unreliable to see once
+  // actually rendered, so this avoids font/line-height sizing entirely.
+  checkboxBox: {
+    width: 9,
+    height: 9,
+    borderWidth: 1,
+    borderColor: "#333333",
+    marginRight: 4,
   },
-  headerRow: {
+  checkboxBoxChecked: { backgroundColor: "#333333" },
+  checkboxLabel: { fontSize: 9 },
+
+  twoCol: { flexDirection: "row" },
+  mainCol: { flex: 2, paddingRight: 16 },
+  sideCol: { flex: 1 },
+
+  tableHeaderRow: {
     flexDirection: "row",
     borderBottomWidth: 1,
     borderBottomColor: "#333333",
     paddingBottom: 4,
     marginBottom: 2,
   },
-  headerCell: { fontFamily: "Helvetica-Bold", fontSize: 9 },
+  tableHeaderCell: { fontFamily: "Helvetica-Bold", fontSize: 8 },
+  row: { flexDirection: "row", borderBottomWidth: 1, borderBottomColor: "#dddddd", paddingVertical: 4 },
   descCell: { flex: 3 },
   amountCell: { flex: 1, textAlign: "right" },
-  roleCell: { flex: 2 },
-  nameCell: { flex: 2 },
-  dateCell: { flex: 2, textAlign: "right" },
   totalRow: { flexDirection: "row", paddingTop: 6 },
   totalLabel: { flex: 3, fontFamily: "Helvetica-Bold", textAlign: "right", paddingRight: 8 },
   totalValue: { flex: 1, fontFamily: "Helvetica-Bold", textAlign: "right" },
+
+  fieldLabel: { color: "#666666", fontSize: 8 },
+  fieldValue: { fontSize: 9, marginBottom: 6 },
+
+  approvalRow: { flexDirection: "row" },
+  approvalCol: { flex: 1, paddingRight: 8, alignItems: "flex-start" },
+  approvalRoleLabel: { fontSize: 8, fontFamily: "Helvetica-Bold", marginBottom: 4 },
+  signatureImage: { width: 100, height: 36, marginBottom: 4 },
+  noSignature: { fontSize: 8, color: "#999999", fontStyle: "italic", marginBottom: 4, height: 36 },
+  approvalName: { fontSize: 8 },
+  approvalDate: { fontSize: 7, color: "#666666" },
+
+  legendLine: { fontSize: 8, marginBottom: 2 },
+
+  directoryGrid: { flexDirection: "row", flexWrap: "wrap" },
+  directoryCard: {
+    width: "16.6%",
+    paddingRight: 6,
+    marginBottom: 8,
+    borderRightWidth: 1,
+    borderRightColor: "#dddddd",
+  },
+  directoryMinistryText: { fontSize: 7, color: "#666666", marginBottom: 2 },
+  directoryOverseerText: { fontSize: 8, fontFamily: "Helvetica-Bold" },
+
   footer: { position: "absolute", bottom: 24, left: 32, right: 32, fontSize: 8, color: "#999999" },
   receiptPage: { padding: 32, alignItems: "center" },
   receiptCaption: { fontSize: 10, fontFamily: "Helvetica-Bold", marginBottom: 12 },
   receiptImage: { maxWidth: 500, maxHeight: 700 },
-  unembeddedItem: { fontSize: 10, marginBottom: 2 },
+  unembeddedItem: { fontSize: 9, marginBottom: 2 },
 });
+
+function formatDate(iso: string): string {
+  return new Date(iso).toLocaleDateString("en-AU", { day: "numeric", month: "short", year: "numeric" });
+}
 
 function formatDecidedAt(iso: string | null): string {
   if (!iso) return "—";
-  return new Date(iso).toLocaleString("en-AU", {
-    dateStyle: "medium",
-    timeStyle: "short",
-  });
+  return new Date(iso).toLocaleString("en-AU", { dateStyle: "medium", timeStyle: "short" });
+}
+
+function Checkbox({ checked, label }: { checked: boolean; label: string }) {
+  return (
+    <View style={styles.checkboxItem} wrap={false}>
+      <View style={[styles.checkboxBox, checked ? styles.checkboxBoxChecked : undefined]} />
+      <Text style={styles.checkboxLabel}>{label}</Text>
+    </View>
+  );
 }
 
 export function VoucherDocument({
   detail,
   receiptImages,
   unembeddableReceiptFilenames,
+  signaturesByRole,
 }: {
   detail: ApprovedRequestDetail;
   receiptImages: ReceiptImageInput[];
   unembeddableReceiptFilenames: string[];
+  signaturesByRole: Map<ApproverRoleValue, Buffer>;
 }) {
   const generatedAt = new Date().toLocaleString("en-AU", { dateStyle: "medium", timeStyle: "short" });
 
   return (
     <Document>
       <Page size="A4" style={styles.page}>
-        <Text style={styles.title}>Approved Reimbursement Voucher</Text>
-        <Text style={styles.voucherNo}>{detail.voucherNo}</Text>
+        <View style={styles.topRow}>
+          <Text style={styles.orgName}>CCF AUSTRALIA - MELBOURNE</Text>
+          <View style={styles.topRight}>
+            <Text style={styles.topRightLine}>VOUCHER NO.: {detail.voucherNo}</Text>
+            <Text style={styles.topRightLine}>DATE: {formatDate(detail.submittedAt)}</Text>
+          </View>
+        </View>
 
         <View style={styles.section}>
-          <View style={styles.headerGrid}>
-            <View style={styles.headerField}>
-              <Text style={styles.fieldLabel}>Request Type</Text>
-              <Text style={styles.fieldValue}>{REQUEST_TYPE_LABELS[detail.requestType]}</Text>
+          <View style={styles.checkboxRow}>
+            {REQUEST_TYPES.map((rt) => (
+              <Checkbox key={rt} checked={rt === detail.requestType} label={REQUEST_TYPE_LABELS[rt]} />
+            ))}
+          </View>
+        </View>
+
+        <View style={styles.section}>
+          <View style={styles.twoCol}>
+            <View style={styles.mainCol}>
+              <Text style={styles.sectionTitle}>Description / Receipts Attached</Text>
+              <View style={styles.tableHeaderRow}>
+                <Text style={[styles.tableHeaderCell, styles.descCell]}>Description</Text>
+                <Text style={[styles.tableHeaderCell, styles.amountCell]}>Amount</Text>
+              </View>
+              {detail.lineItems.map((li, i) => (
+                <View style={styles.row} key={i} wrap={false}>
+                  <Text style={styles.descCell}>{li.description}</Text>
+                  <Text style={styles.amountCell}>${li.amount}</Text>
+                </View>
+              ))}
+              <View style={styles.totalRow} wrap={false}>
+                <Text style={styles.totalLabel}>Total</Text>
+                <Text style={styles.totalValue}>${detail.totalAmount}</Text>
+              </View>
             </View>
-            <View style={styles.headerField}>
-              <Text style={styles.fieldLabel}>Ministry</Text>
-              <Text style={styles.fieldValue}>{MINISTRY_TYPE_LABELS[detail.ministryType]}</Text>
+            <View style={styles.sideCol}>
+              <Text style={styles.sectionTitle}>Ministry (one per voucher)</Text>
+              {Object.entries(MINISTRY_TYPE_LABELS).map(([mt, label]) => (
+                <Checkbox key={mt} checked={mt === detail.ministryType} label={label} />
+              ))}
             </View>
-            <View style={styles.headerField}>
-              <Text style={styles.fieldLabel}>Approval Tier</Text>
-              <Text style={styles.fieldValue}>Tier {detail.tier}</Text>
-            </View>
-            <View style={styles.headerField}>
-              <Text style={styles.fieldLabel}>Total Amount</Text>
-              <Text style={styles.fieldValue}>${detail.totalAmount}</Text>
-            </View>
-            <View style={styles.headerField}>
-              <Text style={styles.fieldLabel}>Requisitioned By</Text>
+          </View>
+        </View>
+
+        <View style={styles.section}>
+          <View style={styles.twoCol}>
+            <View style={styles.mainCol}>
+              <Text style={styles.sectionTitle}>Requisitioned By</Text>
               <Text style={styles.fieldValue}>{detail.requesterName}</Text>
             </View>
-            <View style={styles.headerField}>
-              <Text style={styles.fieldLabel}>Requester Email</Text>
-              <Text style={styles.fieldValue}>{detail.requesterEmail}</Text>
-            </View>
-          </View>
-        </View>
-
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Line Items</Text>
-          <View style={styles.headerRow}>
-            <Text style={[styles.headerCell, styles.descCell]}>Description</Text>
-            <Text style={[styles.headerCell, styles.amountCell]}>Amount</Text>
-          </View>
-          {detail.lineItems.map((li, i) => (
-            <View style={styles.row} key={i}>
-              <Text style={styles.descCell}>{li.description}</Text>
-              <Text style={styles.amountCell}>${li.amount}</Text>
-            </View>
-          ))}
-          <View style={styles.totalRow}>
-            <Text style={styles.totalLabel}>Total</Text>
-            <Text style={styles.totalValue}>${detail.totalAmount}</Text>
-          </View>
-        </View>
-
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Bank Details for Payment</Text>
-          <View style={styles.headerGrid}>
-            <View style={styles.headerField}>
+            <View style={styles.sideCol}>
+              <Text style={styles.sectionTitle}>Bank Details for Payment</Text>
               <Text style={styles.fieldLabel}>Account Name</Text>
               <Text style={styles.fieldValue}>{detail.bankDetails.accountName}</Text>
-            </View>
-            <View style={styles.headerField}>
               <Text style={styles.fieldLabel}>BSB</Text>
               <Text style={styles.fieldValue}>{detail.bankDetails.bsb}</Text>
-            </View>
-            <View style={styles.headerField}>
               <Text style={styles.fieldLabel}>Account Number</Text>
               <Text style={styles.fieldValue}>{detail.bankDetails.accountNumber}</Text>
             </View>
@@ -173,20 +228,37 @@ export function VoucherDocument({
         </View>
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Approval Summary</Text>
-          <View style={styles.headerRow}>
-            <Text style={[styles.headerCell, styles.roleCell]}>Role</Text>
-            <Text style={[styles.headerCell, styles.nameCell]}>Approver</Text>
-            <Text style={[styles.headerCell, styles.dateCell]}>Decided</Text>
+          <Text style={styles.sectionTitle}>Approval</Text>
+          <View style={styles.approvalRow} wrap={false}>
+            {detail.approvals.map((a, i) => {
+              const signature = signaturesByRole.get(a.role);
+              return (
+                <View style={styles.approvalCol} key={i}>
+                  <Text style={styles.approvalRoleLabel}>{APPROVER_ROLE_LABELS[a.role]}</Text>
+                  {signature ? (
+                    // eslint-disable-next-line jsx-a11y/alt-text -- this is @react-pdf/renderer's PDF-drawing Image, not an HTML <img>; it has no alt prop
+                    <Image src={{ data: signature, format: "png" }} style={styles.signatureImage} />
+                  ) : (
+                    <Text style={styles.noSignature}>No signature on file</Text>
+                  )}
+                  <Text style={styles.approvalName}>{a.approverName ?? "—"}</Text>
+                  <Text style={styles.approvalDate}>{formatDecidedAt(a.decidedAt)}</Text>
+                </View>
+              );
+            })}
           </View>
-          {detail.approvals.map((a, i) => (
-            <View style={styles.row} key={i}>
-              <Text style={styles.roleCell}>{APPROVER_ROLE_LABELS[a.role]}</Text>
-              <Text style={styles.nameCell}>{a.approverName ?? "—"}</Text>
-              <Text style={styles.dateCell}>{formatDecidedAt(a.decidedAt)}</Text>
-            </View>
-          ))}
         </View>
+
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Approval Limit</Text>
+          <Text style={styles.legendLine}>Note: no breaking of total amount for less approval.</Text>
+          <Text style={styles.legendLine}>{"<="}$500 — 1 Ministry Overseer</Text>
+          <Text style={styles.legendLine}>{">"}$500 to $2,000 — 1 Ministry Overseer + 1 COS</Text>
+          <Text style={styles.legendLine}>{">"}$2,000 to $5,000 — 2 COS + Finance Overseer</Text>
+          <Text style={styles.legendLine}>{">"}$5,000 — 2 COS + Finance Overseer + Regional Director</Text>
+        </View>
+
+        <MinistryOverseerDirectory directory={detail.approverDirectory} />
 
         {unembeddableReceiptFilenames.length > 0 && (
           <View style={styles.section}>
@@ -213,6 +285,43 @@ export function VoucherDocument({
   );
 }
 
+// Live "who approves what" reference (request-data.ts's getApproverDirectory
+// re-queries ApproverAssignment fresh every time this is generated) --
+// deliberately distinct from the Approval section above, which is a
+// historical record of who actually signed *this* voucher. Grouped by
+// overseer (several ministries commonly share one) into compact cards,
+// matching the real form's compact grouped-column layout rather than a tall
+// one-row-per-ministry table.
+function groupMinistriesByOverseer(
+  directory: ApproverDirectory,
+): { ministryLabels: string[]; overseerName: string }[] {
+  const groups = new Map<string, string[]>();
+  for (const entry of directory) {
+    const overseerName = entry.overseerName ?? "Unassigned";
+    const labels = groups.get(overseerName) ?? [];
+    labels.push(MINISTRY_TYPE_LABELS[entry.ministryType]);
+    groups.set(overseerName, labels);
+  }
+  return Array.from(groups, ([overseerName, ministryLabels]) => ({ overseerName, ministryLabels }));
+}
+
+function MinistryOverseerDirectory({ directory }: { directory: ApproverDirectory }) {
+  const groups = groupMinistriesByOverseer(directory);
+  return (
+    <View style={styles.section}>
+      <Text style={styles.sectionTitle}>Ministry Overseer Directory</Text>
+      <View style={styles.directoryGrid}>
+        {groups.map((g, i) => (
+          <View style={styles.directoryCard} key={i} wrap={false}>
+            <Text style={styles.directoryMinistryText}>{g.ministryLabels.join(" / ")}</Text>
+            <Text style={styles.directoryOverseerText}>{g.overseerName}</Text>
+          </View>
+        ))}
+      </View>
+    </View>
+  );
+}
+
 // Buffer -> "jpg" | "png" | "pdf" | null (null = can't be embedded, e.g.
 // HEIC). Based on the receipt's stored content type, not its filename.
 function classifyReceiptFormat(contentType: string): "jpg" | "png" | "pdf" | null {
@@ -233,6 +342,7 @@ export interface RenderedVoucherPdf {
 export async function renderVoucherPdf(
   detail: ApprovedRequestDetail,
   receiptFiles: { filename: string; buffer: Buffer; contentType: string }[],
+  signaturesByRole: Map<ApproverRoleValue, Buffer>,
 ): Promise<RenderedVoucherPdf> {
   const receiptImages: ReceiptImageInput[] = [];
   const receiptPdfs: ReceiptPdfInput[] = [];
@@ -254,6 +364,7 @@ export async function renderVoucherPdf(
       detail={detail}
       receiptImages={receiptImages}
       unembeddableReceiptFilenames={unembeddableReceiptFilenames}
+      signaturesByRole={signaturesByRole}
     />,
   );
 

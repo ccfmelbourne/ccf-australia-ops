@@ -5,6 +5,7 @@ import { normalizeBsb, formatBsb, assertValidAccountNumber } from "@/lib/bank-de
 import { getTier, getRequiredApproverRoles, APPROVER_ROLES } from "@/lib/approval-routing";
 import type { ApproverRoleValue, ApprovalTier } from "@/lib/approval-routing";
 import type { RequestTypeValue, MinistryTypeValue } from "@/lib/request-types";
+import { MINISTRY_TYPES } from "@/lib/request-types";
 
 // Uses array-form prisma.$transaction([...]) throughout, not the
 // interactive prisma.$transaction(async (tx) => {...}) callback form. In
@@ -57,7 +58,25 @@ export interface ApprovedRequestDetailApproval {
   role: ApproverRoleValue;
   approverName: string | null;
   decidedAt: string | null; // ISO date
+  signatureStorageKey: string | null;
 }
+
+// One row per MinistryType, current Overseer. Reflects *today's*
+// ApproverAssignment data (see getApproverDirectory), not what was assigned
+// at the time this particular request was submitted -- it's a "who to
+// contact now" reference on the voucher, distinct from `approvals` above,
+// which is a historical record of who actually decided *this* request.
+// Deliberately excludes COS1 (the voucher's dynamic Approval row already
+// shows whoever actually signed as COS1 for this request when that role
+// applies) and the two org-wide roles (Finance Overseer/Regional Director --
+// not wanted on this directory; they likewise already appear in the
+// Approval row for tiers that require them).
+export interface ApproverDirectoryMinistryEntry {
+  ministryType: MinistryTypeValue;
+  overseerName: string | null;
+}
+
+export type ApproverDirectory = ApproverDirectoryMinistryEntry[];
 
 export interface ApprovedRequestDetail {
   id: string;
@@ -66,12 +85,14 @@ export interface ApprovedRequestDetail {
   ministryType: MinistryTypeValue;
   totalAmount: string; // formatted
   tier: ApprovalTier;
+  submittedAt: string; // ISO date -- the voucher's "DATE" field
   requesterName: string;
   requesterEmail: string;
   lineItems: ApprovedRequestDetailLineItem[];
   bankDetails: { accountName: string; bsb: string; accountNumber: string };
   receipts: { storageKey: string; filename: string }[];
   approvals: ApprovedRequestDetailApproval[];
+  approverDirectory: ApproverDirectory;
 }
 
 export interface RequestListItemView {
@@ -337,6 +358,7 @@ export async function getApprovedRequestDetail(
   });
   if (!r || !r.bankDetails) return null;
   const bankDetails = r.bankDetails;
+  const approverDirectory = await getApproverDirectory();
   return {
     id: r.id,
     voucherNo: r.voucherNo,
@@ -344,6 +366,7 @@ export async function getApprovedRequestDetail(
     ministryType: r.ministryType,
     totalAmount: formatAmount(r.totalAmount),
     tier: getTier(Number(r.totalAmount)),
+    submittedAt: (r.submittedAt ?? r.createdAt).toISOString(),
     requesterName: r.requester.name,
     requesterEmail: r.requester.email,
     lineItems: r.lineItems.map((li) => ({
@@ -366,8 +389,30 @@ export async function getApprovedRequestDetail(
         role: a.role,
         approverName: a.approver?.name ?? null,
         decidedAt: a.decidedAt ? a.decidedAt.toISOString() : null,
+        signatureStorageKey: a.signatureStorageKey,
       })),
+    approverDirectory,
   };
+}
+
+// Live "who approves what" reference, for the voucher's printed directory
+// section -- deliberately re-queried fresh each time (not resolved once at
+// submission like RequiredApproval.approverUserId is), since its whole
+// purpose is to tell Finance who to contact *today*, not who was assigned
+// back when this particular request was submitted.
+export async function getApproverDirectory(): Promise<ApproverDirectory> {
+  const assignments = await prisma.approverAssignment.findMany({
+    where: { role: "MINISTRY_OVERSEER" },
+    include: { user: true },
+  });
+  const overseerByMinistry = new Map(
+    assignments.filter((a) => a.ministryType).map((a) => [a.ministryType as MinistryTypeValue, a.user.name]),
+  );
+
+  return MINISTRY_TYPES.map((ministryType) => ({
+    ministryType,
+    overseerName: overseerByMinistry.get(ministryType) ?? null,
+  }));
 }
 
 // A single upsert (not separate add/remove) since BankDetails is 1:1 --

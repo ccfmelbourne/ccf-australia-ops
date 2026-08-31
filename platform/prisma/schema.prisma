@@ -156,6 +156,11 @@ model RequiredApproval {
   status                 ApprovalStatus       @default(PENDING)
   decidedAt              DateTime?
   comments               String?
+  // R2 object key for the approver's drawn signature (PNG), captured at the
+  // moment of approval. Null for PENDING rows and for rows decided before
+  // this feature existed -- the voucher PDF renders a "No signature on
+  // file" fallback for those rather than assuming one always exists.
+  signatureStorageKey    String?
 
   @@unique([reimbursementRequestId, role])
 }
