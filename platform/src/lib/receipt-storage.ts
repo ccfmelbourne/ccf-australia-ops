@@ -34,6 +34,43 @@ export function assertValidReceiptFile(file: { size: number; contentType: string
   }
 }
 
+// Walks a PNG's actual chunk structure looking for the acTL (Animation
+// Control) chunk, rather than a naive byte-substring search -- a substring
+// search could false-positive on compressed pixel data that happens to
+// contain the same 4 bytes. Per the APNG spec, acTL must appear before the
+// first IDAT, so it's safe to stop looking once IDAT is reached.
+function isAnimatedPng(bytes: Buffer): boolean {
+  const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+  if (bytes.length < 8 || !bytes.subarray(0, 8).equals(PNG_SIGNATURE)) {
+    return false;
+  }
+  let offset = 8;
+  while (offset + 8 <= bytes.length) {
+    const length = bytes.readUInt32BE(offset);
+    const type = bytes.toString("ascii", offset + 4, offset + 8);
+    if (type === "acTL") return true;
+    if (type === "IDAT") return false;
+    offset += 12 + length; // 4 (length) + 4 (type) + length (data) + 4 (crc)
+  }
+  return false;
+}
+
+// A receipt should be one static document -- an animated PNG (multiple
+// frames, e.g. from exporting a multi-page PDF to a single animated image
+// instead of uploading the PDF itself) plays as a looping animation in any
+// browser that opens it, which isn't a usable receipt either way this app
+// shows it (the requester/approver's view link, or embedded in the voucher
+// PDF). Content-Type alone can't tell an APNG apart from a normal PNG --
+// both report "image/png" -- so this inspects the actual bytes. Only
+// meaningful for image/png; every other allowed type has no such concept.
+export function assertNotAnimatedPng(bytes: Buffer, contentType: string): void {
+  if (contentType === "image/png" && isAnimatedPng(bytes)) {
+    throw new Error(
+      "This PNG is animated (multiple frames) — upload the original PDF or a single static image instead.",
+    );
+  }
+}
+
 // Pure and directly testable. Prefixed by request so a request's receipts
 // group together in the bucket; a random component avoids collisions
 // between two receipts sharing an original filename.

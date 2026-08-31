@@ -6,7 +6,7 @@ import {
   createDraftRequest,
   addLineItem,
   removeLineItem,
-  assertOwnsDraftRequest,
+  assertRequestIsEditable,
   addReceiptRecord,
   removeReceiptRecord,
   getReceiptStorageKeyForOwner,
@@ -18,6 +18,7 @@ import {
 import { REQUEST_TYPES, MINISTRY_TYPES } from "@/lib/request-types";
 import {
   assertValidReceiptFile,
+  assertNotAnimatedPng,
   buildReceiptStorageKey,
   uploadReceipt,
   deleteReceipt,
@@ -183,10 +184,12 @@ export async function uploadReceiptAction(
     assertValidReceiptFile({ size: file.size, contentType: file.type });
     // Checked before the R2 upload (not just inside addReceiptRecord
     // afterward) so an invalid/expired session doesn't waste an upload.
-    await assertOwnsDraftRequest(requestId, userId);
+    await assertRequestIsEditable(requestId, userId);
+
+    const buffer = Buffer.from(await file.arrayBuffer());
+    assertNotAnimatedPng(buffer, file.type);
 
     const storageKey = buildReceiptStorageKey(requestId, file.name);
-    const buffer = Buffer.from(await file.arrayBuffer());
     await uploadReceipt(storageKey, buffer, file.type);
     await addReceiptRecord(requestId, userId, storageKey);
     return { ok: true };

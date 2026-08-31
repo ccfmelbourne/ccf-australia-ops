@@ -2,13 +2,13 @@
 
 import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { toast } from "sonner";
 import {
   uploadReceiptAction,
   removeReceiptAction,
   extractReceiptAction,
   addLineItemAction,
 } from "@/app/requests/actions";
+import { ErrorBanner } from "@/components/ErrorBanner";
 import type { DraftReceiptView } from "@/lib/request-data";
 import type { ReceiptExtractionResult } from "@/lib/receipt-extraction";
 
@@ -49,10 +49,19 @@ export function ReceiptManager({
   // financial data without that explicit confirmation.
   const [scanningReceiptId, setScanningReceiptId] = useState<string | null>(null);
   const [suggestion, setSuggestion] = useState<SuggestionState | null>(null);
+  // Inline error state, not a toast -- ReceiptManager always renders inside
+  // a native <dialog> (RequestDrawer.tsx), which the browser promotes to
+  // the "top layer" the instant it's opened via showModal(). Anything in
+  // the top layer renders above *all* regular-positioned content
+  // regardless of z-index, so a toast fired while the dialog is open would
+  // render behind it -- invisible to the user. Inline text inside the
+  // dialog's own DOM doesn't have this problem.
+  const [error, setError] = useState<string | null>(null);
 
   function handleFileChosen(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
+    setError(null);
     const formData = new FormData();
     formData.set("file", file);
     startTransition(async () => {
@@ -60,7 +69,7 @@ export function ReceiptManager({
       if (result.ok) {
         router.refresh();
       } else {
-        toast.error(result.error ?? "Something went wrong.");
+        setError(result.error ?? "Something went wrong.");
       }
       // Clear so choosing the same file again still fires onChange.
       if (fileInputRef.current) fileInputRef.current.value = "";
@@ -68,17 +77,19 @@ export function ReceiptManager({
   }
 
   function handleRemove(receiptId: string) {
+    setError(null);
     startTransition(async () => {
       const result = await removeReceiptAction(receiptId);
       if (result.ok) {
         router.refresh();
       } else {
-        toast.error(result.error ?? "Something went wrong.");
+        setError(result.error ?? "Something went wrong.");
       }
     });
   }
 
   function handleScan(receiptId: string) {
+    setError(null);
     setSuggestion(null);
     setScanningReceiptId(receiptId);
     startTransition(async () => {
@@ -87,7 +98,7 @@ export function ReceiptManager({
       if (result.ok && result.result) {
         setSuggestion(toSuggestionState(receiptId, result.result));
       } else {
-        toast.error(result.error ?? "Something went wrong.");
+        setError(result.error ?? "Something went wrong.");
       }
     });
   }
@@ -96,13 +107,14 @@ export function ReceiptManager({
     if (!suggestion) return;
     const description = suggestion.merchant.trim();
     if (!description || Number(suggestion.amount) <= 0) return;
+    setError(null);
     startTransition(async () => {
       const result = await addLineItemAction(requestId, description, suggestion.amount);
       if (result.ok) {
         setSuggestion(null);
         router.refresh();
       } else {
-        toast.error(result.error ?? "Something went wrong.");
+        setError(result.error ?? "Something went wrong.");
       }
     });
   }
@@ -112,6 +124,11 @@ export function ReceiptManager({
       <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
         Receipts
       </h2>
+      {error && (
+        <div className="mb-2">
+          <ErrorBanner message={error} />
+        </div>
+      )}
       {receipts.length === 0 ? (
         <p className="mb-3 text-sm text-slate-500">No receipts attached yet.</p>
       ) : (

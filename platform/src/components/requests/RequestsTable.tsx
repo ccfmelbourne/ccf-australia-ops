@@ -8,6 +8,7 @@ import {
   MINISTRY_TYPE_LABELS,
   REQUEST_STATUS_LABELS,
 } from "@/lib/request-types";
+import { ErrorBanner } from "@/components/ErrorBanner";
 import { RequestDrawer } from "./RequestDrawer";
 import type { RequestListItemView, DraftRequestView } from "@/lib/request-data";
 
@@ -58,7 +59,7 @@ export function RequestsTable({
         </button>
       </div>
 
-      {error && <p className="text-sm text-red-600">{error}</p>}
+      {error && <ErrorBanner message={error} />}
 
       {requests.length === 0 ? (
         <p className="text-sm text-slate-500">No requests yet.</p>
@@ -83,7 +84,9 @@ export function RequestsTable({
                 <td className="py-2 pr-2 text-right font-mono">${r.totalAmount}</td>
                 <td className="py-2 pr-2">{REQUEST_STATUS_LABELS[r.status] ?? r.status}</td>
                 <td className="py-2 text-right">
-                  {r.status === "DRAFT" && (
+                  {(r.status === "DRAFT" ||
+                    r.status === "NEEDS_CLARIFICATION" ||
+                    r.status === "REJECTED_RETURNED") && (
                     <span className="flex justify-end gap-3">
                       <button
                         type="button"
