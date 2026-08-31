@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { S3Client, PutObjectCommand, GetObjectCommand } from "@aws-sdk/client-s3";
+import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
 
 // Same R2 bucket/credentials as receipt-storage.ts, just a different key
 // prefix -- kept as a separate small file (own S3Client setup) rather than
@@ -78,4 +78,11 @@ export async function downloadSignatureBytes(storageKey: string): Promise<Buffer
   }
   const bytes = await response.Body.transformToByteArray();
   return Buffer.from(bytes);
+}
+
+// Used when a request carrying decided (signed) approvals gets deleted --
+// RequiredApproval rows cascade-delete at the DB level, but their R2
+// signature objects don't, same as receipts.
+export async function deleteSignature(storageKey: string): Promise<void> {
+  await getClient().send(new DeleteObjectCommand({ Bucket: getBucketName(), Key: storageKey }));
 }
