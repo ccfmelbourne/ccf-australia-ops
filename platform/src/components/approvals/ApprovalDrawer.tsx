@@ -5,18 +5,8 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { decideApprovalAction } from "@/app/approvals/actions";
 import { REQUEST_TYPE_LABELS, MINISTRY_TYPE_LABELS } from "@/lib/request-types";
+import { APPROVER_ROLE_LABELS } from "@/lib/approval-routing";
 import type { PendingApprovalView } from "@/lib/approval-data";
-
-// Approver role labels -- only shown here (inside the detail panel), not
-// in the compact list row, which was getting cluttered with too many
-// subheading fields.
-const ROLE_LABELS: Record<string, string> = {
-  MINISTRY_OVERSEER: "Ministry Overseer",
-  COS1: "COS 1",
-  COS2: "COS 2",
-  FINANCE_OVERSEER: "Finance Overseer",
-  REGIONAL_DIRECTOR: "Regional Director",
-};
 
 // Same native-<dialog> side-panel pattern as RequestDrawer.tsx -- gives a
 // fixed, independently-scrollable area regardless of how many line items a
@@ -88,7 +78,7 @@ export function ApprovalDrawer({
           <dt className="text-slate-500">Ministry</dt>
           <dd>{MINISTRY_TYPE_LABELS[approval.ministryType]}</dd>
           <dt className="text-slate-500">Your role</dt>
-          <dd>{ROLE_LABELS[approval.role] ?? approval.role}</dd>
+          <dd>{APPROVER_ROLE_LABELS[approval.role as keyof typeof APPROVER_ROLE_LABELS] ?? approval.role}</dd>
           <dt className="text-slate-500">Total</dt>
           <dd className="font-mono font-semibold">${approval.totalAmount}</dd>
         </dl>

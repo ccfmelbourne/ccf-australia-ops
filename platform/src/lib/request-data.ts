@@ -2,8 +2,8 @@ import { prisma } from "@/lib/prisma";
 import { formatAmount } from "@/lib/money";
 import { getReceiptDownloadUrl } from "@/lib/receipt-storage";
 import { normalizeBsb, formatBsb, assertValidAccountNumber } from "@/lib/bank-details";
-import { getTier, getRequiredApproverRoles } from "@/lib/approval-routing";
-import type { ApproverRoleValue } from "@/lib/approval-routing";
+import { getTier, getRequiredApproverRoles, APPROVER_ROLES } from "@/lib/approval-routing";
+import type { ApproverRoleValue, ApprovalTier } from "@/lib/approval-routing";
 import type { RequestTypeValue, MinistryTypeValue } from "@/lib/request-types";
 
 // Uses array-form prisma.$transaction([...]) throughout, not the
@@ -48,6 +48,32 @@ export interface DraftRequestView {
   bankDetails: DraftBankDetailsView | null;
 }
 
+export interface ApprovedRequestDetailLineItem {
+  description: string;
+  amount: string; // formatted
+}
+
+export interface ApprovedRequestDetailApproval {
+  role: ApproverRoleValue;
+  approverName: string | null;
+  decidedAt: string | null; // ISO date
+}
+
+export interface ApprovedRequestDetail {
+  id: string;
+  voucherNo: string;
+  requestType: RequestTypeValue;
+  ministryType: MinistryTypeValue;
+  totalAmount: string; // formatted
+  tier: ApprovalTier;
+  requesterName: string;
+  requesterEmail: string;
+  lineItems: ApprovedRequestDetailLineItem[];
+  bankDetails: { accountName: string; bsb: string; accountNumber: string };
+  receipts: { storageKey: string; filename: string }[];
+  approvals: ApprovedRequestDetailApproval[];
+}
+
 export interface RequestListItemView {
   id: string;
   voucherNo: string;
@@ -60,7 +86,7 @@ export interface RequestListItemView {
 
 // storageKey is "receipts/{requestId}/{uuid}-{safeName}" (buildReceiptStorageKey
 // in receipt-storage.ts) -- strip the folder and UUID prefix for display.
-function receiptFilename(storageKey: string): string {
+export function receiptFilename(storageKey: string): string {
   const base = storageKey.split("/").pop() ?? storageKey;
   return base.replace(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}-/, "");
 }
@@ -284,6 +310,64 @@ export async function submitRequest(requestId: string, requesterId: string): Pro
       details: { tier, requiredRoles: roles },
     },
   });
+}
+
+// Everything the approved-request voucher PDF/notification needs, fetched
+// once right after a request reaches APPROVED. No status filter beyond
+// existence -- by the time every RequiredApproval row is decided, line
+// items/bank details/receipts/request type/ministry can no longer have
+// changed (assertOwnsDraftRequest gates all of those to status: "DRAFT",
+// and decideApproval refuses to re-decide an already-decided row), so this
+// read is already exactly the data that was approved, not a live/mutable
+// view of it. Returns null if bank details are missing, which submitRequest
+// already guarantees can't happen for a request that reached IN_APPROVAL --
+// treated as a data-integrity signal, not an expected case.
+export async function getApprovedRequestDetail(
+  requestId: string,
+): Promise<ApprovedRequestDetail | null> {
+  const r = await prisma.reimbursementRequest.findUnique({
+    where: { id: requestId },
+    include: {
+      requester: true,
+      lineItems: true,
+      receipts: true,
+      bankDetails: true,
+      requiredApprovals: { include: { approver: true } },
+    },
+  });
+  if (!r || !r.bankDetails) return null;
+  const bankDetails = r.bankDetails;
+  return {
+    id: r.id,
+    voucherNo: r.voucherNo,
+    requestType: r.requestType,
+    ministryType: r.ministryType,
+    totalAmount: formatAmount(r.totalAmount),
+    tier: getTier(Number(r.totalAmount)),
+    requesterName: r.requester.name,
+    requesterEmail: r.requester.email,
+    lineItems: r.lineItems.map((li) => ({
+      description: li.description,
+      amount: formatAmount(li.amount),
+    })),
+    bankDetails: {
+      accountName: bankDetails.accountName,
+      bsb: formatBsb(bankDetails.bsb),
+      accountNumber: bankDetails.accountNumber,
+    },
+    receipts: r.receipts.map((rec) => ({
+      storageKey: rec.storageKey,
+      filename: receiptFilename(rec.storageKey),
+    })),
+    approvals: r.requiredApprovals
+      .slice()
+      .sort((a, b) => APPROVER_ROLES.indexOf(a.role) - APPROVER_ROLES.indexOf(b.role))
+      .map((a) => ({
+        role: a.role,
+        approverName: a.approver?.name ?? null,
+        decidedAt: a.decidedAt ? a.decidedAt.toISOString() : null,
+      })),
+  };
 }
 
 // A single upsert (not separate add/remove) since BankDetails is 1:1 --

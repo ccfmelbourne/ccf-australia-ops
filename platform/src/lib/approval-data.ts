@@ -1,5 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { formatAmount } from "@/lib/money";
+import { getApprovedRequestDetail } from "@/lib/request-data";
+import { sendApprovedRequestEmail } from "@/lib/notifications";
 import type { RequestTypeValue, MinistryTypeValue } from "@/lib/request-types";
 
 export interface PendingApprovalLineItemView {
@@ -102,6 +104,17 @@ export async function decideApproval(
         where: { id: approval.reimbursementRequestId },
         data: { status: "APPROVED" },
       });
+      // Per ADR 0001, a notification failure must never undo or block the
+      // approval decision it's reporting on -- caught and logged, not
+      // rethrown.
+      try {
+        const detail = await getApprovedRequestDetail(approval.reimbursementRequestId);
+        if (detail) {
+          await sendApprovedRequestEmail(detail);
+        }
+      } catch (err) {
+        console.error("Failed to send approved-request notification:", err);
+      }
     }
   }
 

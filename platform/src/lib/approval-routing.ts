@@ -15,6 +15,14 @@ export const APPROVER_ROLES = [
 ] as const;
 export type ApproverRoleValue = (typeof APPROVER_ROLES)[number];
 
+export const APPROVER_ROLE_LABELS: Record<ApproverRoleValue, string> = {
+  MINISTRY_OVERSEER: "Ministry Overseer",
+  COS1: "COS 1",
+  COS2: "COS 2",
+  FINANCE_OVERSEER: "Finance Overseer",
+  REGIONAL_DIRECTOR: "Regional Director",
+};
+
 export type ApprovalTier = 1 | 2 | 3 | 4;
 
 // Approval Limits: <=$500 / >$500-2,000 / >$2,000-5,000 / >$5,000.
