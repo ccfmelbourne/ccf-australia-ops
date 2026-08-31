@@ -2,9 +2,9 @@
 
 import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { toast } from "sonner";
 import SignatureCanvas from "react-signature-canvas";
-import { decideApprovalAction } from "@/app/approvals/actions";
+import { ErrorBanner } from "@/components/ErrorBanner";
+import { decideApprovalAction, requestChangesAction } from "@/app/approvals/actions";
 import { REQUEST_TYPE_LABELS, MINISTRY_TYPE_LABELS } from "@/lib/request-types";
 import { APPROVER_ROLE_LABELS } from "@/lib/approval-routing";
 import type { PendingApprovalView } from "@/lib/approval-data";
@@ -25,6 +25,14 @@ export function ApprovalDrawer({
   const sigPadRef = useRef<SignatureCanvas>(null);
   const [comment, setComment] = useState("");
   const [isPending, startTransition] = useTransition();
+  // Inline error state, not a toast -- this component IS a native
+  // <dialog>, which the browser promotes to the "top layer" the instant
+  // it's opened via showModal(). Anything in the top layer renders above
+  // *all* regular-positioned content regardless of z-index, so a toast
+  // fired while the dialog is open would render behind it -- invisible to
+  // the user. Inline text inside the dialog's own DOM doesn't have this
+  // problem.
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const dialog = dialogRef.current;
@@ -36,10 +44,11 @@ export function ApprovalDrawer({
   }
 
   function handleDecide(decision: "APPROVED" | "REJECTED") {
+    setError(null);
     let signatureDataUrl: string | null = null;
     if (decision === "APPROVED") {
       if (!sigPadRef.current || sigPadRef.current.isEmpty()) {
-        toast.error("Please sign to approve.");
+        setError("Please sign to approve.");
         return;
       }
       signatureDataUrl = sigPadRef.current.getTrimmedCanvas().toDataURL("image/png");
@@ -51,7 +60,20 @@ export function ApprovalDrawer({
         router.refresh();
         handleClose();
       } else {
-        toast.error(result.error ?? "Something went wrong.");
+        setError(result.error ?? "Something went wrong.");
+      }
+    });
+  }
+
+  function handleRequestChanges() {
+    setError(null);
+    startTransition(async () => {
+      const result = await requestChangesAction(approval.approvalId, comment);
+      if (result.ok) {
+        router.refresh();
+        handleClose();
+      } else {
+        setError(result.error ?? "Something went wrong.");
       }
     });
   }
@@ -110,14 +132,42 @@ export function ApprovalDrawer({
               ))}
             </ul>
           )}
-          <p className="mt-1 text-xs text-slate-500">
-            {approval.receiptCount} receipt{approval.receiptCount === 1 ? "" : "s"} attached.
+        </div>
+
+        <div>
+          <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
+            Receipts
           </p>
+          {approval.receipts.length === 0 ? (
+            <p className="text-sm text-slate-500">None attached.</p>
+          ) : (
+            <ul className="flex flex-col gap-1">
+              {approval.receipts.map((r, i) => (
+                <li
+                  key={i}
+                  className="flex items-center justify-between rounded-md border border-slate-200 px-3 py-2 text-sm"
+                >
+                  <span className="truncate font-mono text-slate-700">{r.filename}</span>
+                  {/* Signed URL, computed server-side at render time -- lets
+                      an approver check a receipt against the line-item list
+                      before deciding, not just see a count. */}
+                  <a
+                    href={r.viewUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="shrink-0 text-teal-700 hover:underline"
+                  >
+                    View
+                  </a>
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
 
         <div className="flex flex-col gap-1">
           <label htmlFor="approval-comment" className="text-sm font-medium text-slate-700">
-            Comment (required to reject)
+            Comment (required to reject or request changes)
           </label>
           <textarea
             id="approval-comment"
@@ -145,6 +195,8 @@ export function ApprovalDrawer({
           />
         </div>
 
+        {error && <ErrorBanner message={error} />}
+
         <div className="flex gap-3">
           <button
             type="button"
@@ -161,6 +213,14 @@ export function ApprovalDrawer({
             className="rounded-md border border-red-300 px-4 py-2 text-sm font-semibold text-red-600 hover:bg-red-50 disabled:opacity-60"
           >
             Reject
+          </button>
+          <button
+            type="button"
+            disabled={isPending}
+            onClick={handleRequestChanges}
+            className="rounded-md border border-amber-300 px-4 py-2 text-sm font-semibold text-amber-700 hover:bg-amber-50 disabled:opacity-60"
+          >
+            Request Changes
           </button>
         </div>
       </div>

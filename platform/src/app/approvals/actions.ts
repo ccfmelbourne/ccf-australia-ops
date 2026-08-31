@@ -1,7 +1,7 @@
 "use server";
 
 import { getCurrentUserId } from "@/lib/user-session";
-import { decideApproval } from "@/lib/approval-data";
+import { decideApproval, requestChanges } from "@/lib/approval-data";
 
 const DATA_URL_PREFIX = /^data:image\/png;base64,/;
 
@@ -29,6 +29,25 @@ export async function decideApprovalAction(
 
   try {
     await decideApproval(approvalId, userId, decision, comments.trim() || null, signatureBuffer);
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Something went wrong." };
+  }
+}
+
+export async function requestChangesAction(
+  approvalId: string,
+  comments: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const userId = await getCurrentUserId();
+  if (!userId) {
+    return { ok: false, error: "Not signed in." };
+  }
+  if (comments.trim().length === 0) {
+    return { ok: false, error: "A comment is required when requesting changes." };
+  }
+  try {
+    await requestChanges(approvalId, userId, comments.trim());
     return { ok: true };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : "Something went wrong." };

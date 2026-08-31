@@ -16,6 +16,7 @@ import {
 import { LineItemManager } from "./LineItemManager";
 import { ReceiptManager } from "./ReceiptManager";
 import { BankDetailsManager } from "./BankDetailsManager";
+import { ErrorBanner } from "@/components/ErrorBanner";
 import type { DraftRequestView } from "@/lib/request-data";
 
 // A native <dialog> styled as a right-side panel on wide viewports and a
@@ -104,11 +105,7 @@ function CreateStep({ onCreated }: { onCreated: (id: string) => void }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  return error ? (
-    <p className="text-sm text-red-600">{error}</p>
-  ) : (
-    <p className="text-sm text-slate-500">Creating…</p>
-  );
+  return error ? <ErrorBanner message={error} /> : <p className="text-sm text-slate-500">Creating…</p>;
 }
 
 function EditContent({ data, onClose }: { data: DraftRequestView; onClose: () => void }) {
@@ -147,6 +144,16 @@ function EditContent({ data, onClose }: { data: DraftRequestView; onClose: () =>
 
   return (
     <>
+      {data.returnReason && (
+        <div className="rounded-md border border-amber-300 bg-amber-50 p-4 text-sm">
+          <p className="font-semibold text-amber-800">
+            {data.returnReason.decision === "REJECTED" ? "Rejected" : "Changes requested"} by{" "}
+            {data.returnReason.actorName}
+          </p>
+          <p className="mt-1 text-amber-700">{data.returnReason.comments}</p>
+        </div>
+      )}
+
       <div className="flex flex-col gap-4">
         <div className="flex flex-col gap-1">
           <label htmlFor="requestType" className="text-sm font-medium text-slate-700">
@@ -190,7 +197,7 @@ function EditContent({ data, onClose }: { data: DraftRequestView; onClose: () =>
             ))}
           </select>
         </div>
-        {error && <p className="text-sm text-red-600">{error}</p>}
+        {error && <ErrorBanner message={error} />}
       </div>
 
       <LineItemManager
@@ -202,14 +209,20 @@ function EditContent({ data, onClose }: { data: DraftRequestView; onClose: () =>
       <BankDetailsManager requestId={data.id} bankDetails={data.bankDetails} />
 
       <div className="flex flex-col gap-2 border-t border-slate-200 pt-4">
-        {submitError && <p className="text-sm text-red-600">{submitError}</p>}
+        {submitError && <ErrorBanner message={submitError} />}
         <button
           type="button"
           disabled={isSubmitPending}
           onClick={handleSubmit}
           className="self-start rounded-md bg-teal-600 px-4 py-2 text-sm font-semibold text-white hover:bg-teal-700 disabled:opacity-60"
         >
-          {isSubmitPending ? "Submitting…" : "Submit"}
+          {isSubmitPending
+            ? data.returnReason
+              ? "Resubmitting…"
+              : "Submitting…"
+            : data.returnReason
+              ? "Resubmit"
+              : "Submit"}
         </button>
       </div>
     </>
