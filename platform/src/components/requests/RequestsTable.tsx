@@ -23,6 +23,10 @@ export function RequestsTable({
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
+  // Deleting a request is permanent (line items/receipts/bank
+  // details/approval history all go with it) -- clicking Delete arms this
+  // row rather than firing immediately, so a second click is required.
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
   function openEdit(id: string) {
     setCreating(false);
@@ -39,6 +43,7 @@ export function RequestsTable({
     startTransition(async () => {
       const result = await deleteRequestAction(id);
       if (result.ok) {
+        setConfirmDeleteId(null);
         router.refresh();
       } else {
         setError(result.error ?? "Something went wrong.");
@@ -87,22 +92,45 @@ export function RequestsTable({
                   {(r.status === "DRAFT" ||
                     r.status === "NEEDS_CLARIFICATION" ||
                     r.status === "REJECTED_RETURNED") && (
-                    <span className="flex justify-end gap-3">
-                      <button
-                        type="button"
-                        onClick={() => openEdit(r.id)}
-                        className="text-teal-700 hover:underline"
-                      >
-                        Edit
-                      </button>
-                      <button
-                        type="button"
-                        disabled={isPending}
-                        onClick={() => handleDelete(r.id)}
-                        className="text-red-600 hover:underline disabled:opacity-60"
-                      >
-                        Delete
-                      </button>
+                    <span className="flex justify-end items-center gap-3">
+                      {confirmDeleteId === r.id ? (
+                        <>
+                          <span className="text-slate-600">Delete this request?</span>
+                          <button
+                            type="button"
+                            disabled={isPending}
+                            onClick={() => handleDelete(r.id)}
+                            className="font-semibold text-red-600 hover:underline disabled:opacity-60"
+                          >
+                            {isPending ? "Deleting…" : "Yes, delete"}
+                          </button>
+                          <button
+                            type="button"
+                            disabled={isPending}
+                            onClick={() => setConfirmDeleteId(null)}
+                            className="text-slate-600 hover:underline disabled:opacity-60"
+                          >
+                            Cancel
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => openEdit(r.id)}
+                            className="text-teal-700 hover:underline"
+                          >
+                            Edit
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setConfirmDeleteId(r.id)}
+                            className="text-red-600 hover:underline"
+                          >
+                            Delete
+                          </button>
+                        </>
+                      )}
                     </span>
                   )}
                 </td>

@@ -149,7 +149,7 @@ model BankDetails {
 model RequiredApproval {
   id                     String               @id @default(cuid())
   reimbursementRequestId String
-  request                ReimbursementRequest @relation(fields: [reimbursementRequestId], references: [id])
+  request                ReimbursementRequest @relation(fields: [reimbursementRequestId], references: [id], onDelete: Cascade)
   role                   ApproverRole
   approverUserId         String?
   approver               User?                @relation(fields: [approverUserId], references: [id])

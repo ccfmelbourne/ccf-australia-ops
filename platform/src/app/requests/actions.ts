@@ -24,6 +24,7 @@ import {
   deleteReceipt,
   downloadReceiptBytes,
 } from "@/lib/receipt-storage";
+import { deleteSignature } from "@/lib/signature-storage";
 import { receiptExtractionService, type ReceiptExtractionResult } from "@/lib/receipt-extraction";
 
 const requestDetailsSchema = z.object({
@@ -91,8 +92,11 @@ export async function deleteRequestAction(
     return { ok: false, error: "Not signed in." };
   }
   try {
-    const { storageKeys } = await deleteDraftRequest(requestId, userId);
-    await Promise.all(storageKeys.map((key) => deleteReceipt(key)));
+    const { receiptStorageKeys, signatureStorageKeys } = await deleteDraftRequest(requestId, userId);
+    await Promise.all([
+      ...receiptStorageKeys.map((key) => deleteReceipt(key)),
+      ...signatureStorageKeys.map((key) => deleteSignature(key)),
+    ]);
     return { ok: true };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : "Something went wrong." };

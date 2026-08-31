@@ -295,20 +295,31 @@ export async function updateDraftRequestDetails(
 }
 
 // Deletes the request row itself -- LineItem/Receipt/BankDetails/
-// AuditLogEntry all cascade via the schema's onDelete: Cascade. Returns the
-// receipt storage keys first so the caller can delete the R2 objects,
-// since R2 isn't part of a Postgres cascade (mirrors removeReceiptRecord's
-// existing return-the-key-don't-reach-into-receipt-storage pattern).
+// RequiredApproval/AuditLogEntry all cascade via the schema's
+// onDelete: Cascade. Returns the receipt and signature storage keys first
+// so the caller can delete the R2 objects, since R2 isn't part of a
+// Postgres cascade (mirrors removeReceiptRecord's existing
+// return-the-key-don't-reach-into-receipt-storage pattern). A request
+// reachable here (DRAFT/NEEDS_CLARIFICATION/REJECTED_RETURNED, see
+// EDITABLE_STATUSES) can have RequiredApproval rows with a signature
+// already on them -- e.g. one approver approved before another rejected or
+// requested changes -- so this isn't just a DRAFT-only concern anymore.
 export async function deleteDraftRequest(
   requestId: string,
   requesterId: string,
-): Promise<{ storageKeys: string[] }> {
+): Promise<{ receiptStorageKeys: string[]; signatureStorageKeys: string[] }> {
   await assertRequestIsEditable(requestId, requesterId);
-  const receipts = await prisma.receipt.findMany({
-    where: { reimbursementRequestId: requestId },
-  });
+  const [receipts, approvals] = await Promise.all([
+    prisma.receipt.findMany({ where: { reimbursementRequestId: requestId } }),
+    prisma.requiredApproval.findMany({ where: { reimbursementRequestId: requestId } }),
+  ]);
   await prisma.reimbursementRequest.delete({ where: { id: requestId } });
-  return { storageKeys: receipts.map((r) => r.storageKey) };
+  return {
+    receiptStorageKeys: receipts.map((r) => r.storageKey),
+    signatureStorageKeys: approvals
+      .map((a) => a.signatureStorageKey)
+      .filter((key): key is string => key !== null),
+  };
 }
 
 // FINANCE_OVERSEER/REGIONAL_DIRECTOR are assigned org-wide (ministryType:
