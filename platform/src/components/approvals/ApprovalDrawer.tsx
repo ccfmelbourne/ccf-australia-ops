@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
+import SignatureCanvas from "react-signature-canvas";
 import { decideApprovalAction } from "@/app/approvals/actions";
 import { REQUEST_TYPE_LABELS, MINISTRY_TYPE_LABELS } from "@/lib/request-types";
 import { APPROVER_ROLE_LABELS } from "@/lib/approval-routing";
@@ -21,6 +22,7 @@ export function ApprovalDrawer({
 }) {
   const router = useRouter();
   const dialogRef = useRef<HTMLDialogElement>(null);
+  const sigPadRef = useRef<SignatureCanvas>(null);
   const [comment, setComment] = useState("");
   const [isPending, startTransition] = useTransition();
 
@@ -34,8 +36,17 @@ export function ApprovalDrawer({
   }
 
   function handleDecide(decision: "APPROVED" | "REJECTED") {
+    let signatureDataUrl: string | null = null;
+    if (decision === "APPROVED") {
+      if (!sigPadRef.current || sigPadRef.current.isEmpty()) {
+        toast.error("Please sign to approve.");
+        return;
+      }
+      signatureDataUrl = sigPadRef.current.getTrimmedCanvas().toDataURL("image/png");
+    }
+
     startTransition(async () => {
-      const result = await decideApprovalAction(approval.approvalId, decision, comment);
+      const result = await decideApprovalAction(approval.approvalId, decision, comment, signatureDataUrl);
       if (result.ok) {
         router.refresh();
         handleClose();
@@ -114,6 +125,23 @@ export function ApprovalDrawer({
             onChange={(e) => setComment(e.target.value)}
             rows={3}
             className="rounded-md border border-slate-300 px-3 py-2 text-sm"
+          />
+        </div>
+
+        <div className="flex flex-col gap-1">
+          <div className="flex items-center justify-between">
+            <label className="text-sm font-medium text-slate-700">Sign to approve</label>
+            <button
+              type="button"
+              onClick={() => sigPadRef.current?.clear()}
+              className="text-xs font-medium text-slate-500 hover:text-slate-700"
+            >
+              Clear
+            </button>
+          </div>
+          <SignatureCanvas
+            ref={sigPadRef}
+            canvasProps={{ className: "h-40 w-full rounded-md border border-slate-300 bg-white" }}
           />
         </div>
 

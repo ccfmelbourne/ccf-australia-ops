@@ -1,5 +1,6 @@
 import { Resend } from "resend";
 import { downloadReceiptBytes } from "@/lib/receipt-storage";
+import { downloadSignatureBytes } from "@/lib/signature-storage";
 import { renderVoucherPdf } from "@/lib/voucher-pdf";
 import { buildApprovedRequestEmail } from "@/lib/notification-content";
 import type { ApprovedRequestDetail } from "@/lib/request-data";
@@ -47,13 +48,27 @@ function getFinanceNotificationEmail(): string {
 // file. Never a link, always a real attachment.
 export async function sendApprovedRequestEmail(detail: ApprovedRequestDetail): Promise<void> {
   const { subject, text } = buildApprovedRequestEmail(detail);
-  const receiptFiles = await Promise.all(
-    detail.receipts.map(async (r) => {
-      const { buffer, contentType } = await downloadReceiptBytes(r.storageKey);
-      return { filename: r.filename, buffer, contentType };
-    }),
+  const [receiptFiles, signaturesByRole] = await Promise.all([
+    Promise.all(
+      detail.receipts.map(async (r) => {
+        const { buffer, contentType } = await downloadReceiptBytes(r.storageKey);
+        return { filename: r.filename, buffer, contentType };
+      }),
+    ),
+    Promise.all(
+      detail.approvals
+        .filter((a) => a.signatureStorageKey)
+        .map(async (a) => ({
+          role: a.role,
+          buffer: await downloadSignatureBytes(a.signatureStorageKey as string),
+        })),
+    ).then((entries) => new Map(entries.map((e) => [e.role, e.buffer]))),
+  ]);
+  const { buffer: voucherPdf, unembeddableReceiptFilenames } = await renderVoucherPdf(
+    detail,
+    receiptFiles,
+    signaturesByRole,
   );
-  const { buffer: voucherPdf, unembeddableReceiptFilenames } = await renderVoucherPdf(detail, receiptFiles);
   const fallbackAttachments = receiptFiles
     .filter((file) => unembeddableReceiptFilenames.includes(file.filename))
     .map((file) => ({ filename: file.filename, content: file.buffer }));

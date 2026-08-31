@@ -10,12 +10,21 @@ const baseDetail: ApprovedRequestDetail = {
   ministryType: "ADMIN",
   totalAmount: "245.80",
   tier: 1,
+  submittedAt: "2026-08-31T00:00:00.000Z",
   requesterName: "Jane Requester",
   requesterEmail: "jane@example.org",
   lineItems: [{ description: "Printer paper", amount: "245.80" }],
   bankDetails: { accountName: "Jane Requester", bsb: "123-456", accountNumber: "12345678" },
   receipts: [{ storageKey: "receipts/req-1/abc-receipt.jpg", filename: "receipt.jpg" }],
-  approvals: [{ role: "MINISTRY_OVERSEER", approverName: "Approver One", decidedAt: "2026-08-31T00:00:00.000Z" }],
+  approvals: [
+    {
+      role: "MINISTRY_OVERSEER",
+      approverName: "Approver One",
+      decidedAt: "2026-08-31T00:00:00.000Z",
+      signatureStorageKey: "signatures/approval-1/abc.png",
+    },
+  ],
+  approverDirectory: [{ ministryType: "ADMIN", overseerName: "Approver One" }],
 };
 
 test("buildApprovedRequestEmail includes the voucher number, requester, and total", () => {

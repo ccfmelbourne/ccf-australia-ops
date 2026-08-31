@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { formatAmount } from "@/lib/money";
 import { getApprovedRequestDetail } from "@/lib/request-data";
 import { sendApprovedRequestEmail } from "@/lib/notifications";
+import { assertValidSignatureImage, buildSignatureStorageKey, uploadSignature } from "@/lib/signature-storage";
 import type { RequestTypeValue, MinistryTypeValue } from "@/lib/request-types";
 
 export interface PendingApprovalLineItemView {
@@ -71,6 +72,7 @@ export async function decideApproval(
   userId: string,
   decision: "APPROVED" | "REJECTED",
   comments: string | null,
+  signatureBuffer: Buffer | null,
 ): Promise<void> {
   const approval = await prisma.requiredApproval.findUnique({
     where: { id: approvalId },
@@ -84,10 +86,20 @@ export async function decideApproval(
   ) {
     throw new Error("Approval not found.");
   }
+  if (decision === "APPROVED" && !signatureBuffer) {
+    throw new Error("A signature is required to approve.");
+  }
+
+  let signatureStorageKey: string | null = null;
+  if (decision === "APPROVED" && signatureBuffer) {
+    assertValidSignatureImage(signatureBuffer);
+    signatureStorageKey = buildSignatureStorageKey(approvalId);
+    await uploadSignature(signatureStorageKey, signatureBuffer);
+  }
 
   await prisma.requiredApproval.update({
     where: { id: approvalId },
-    data: { status: decision, decidedAt: new Date(), comments },
+    data: { status: decision, decidedAt: new Date(), comments, signatureStorageKey },
   });
 
   if (decision === "REJECTED") {
