@@ -3,12 +3,9 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { deleteRequestAction } from "@/app/requests/actions";
-import {
-  REQUEST_TYPE_LABELS,
-  MINISTRY_TYPE_LABELS,
-  REQUEST_STATUS_LABELS,
-} from "@/lib/request-types";
+import { REQUEST_TYPE_LABELS, MINISTRY_TYPE_LABELS } from "@/lib/request-types";
 import { ErrorBanner } from "@/components/ErrorBanner";
+import { RequestStatusBadge } from "@/components/RequestStatusBadge";
 import { RequestDrawer } from "./RequestDrawer";
 import { RequestProgressDrawer } from "./RequestProgressDrawer";
 import type { RequestListItemView, DraftRequestView, RequestProgressView } from "@/lib/request-data";
@@ -121,7 +118,7 @@ export function RequestsTable({
                 <th className="py-2 pr-2">Request</th>
                 <th className="py-2 pr-2">Type</th>
                 <th className="py-2 pr-2">Ministry</th>
-                <th className="py-2 pr-2 text-right">Amount</th>
+                <th className="py-2 pr-6 text-right min-w-[100px]">Amount</th>
                 <th className="py-2 pr-2">Status</th>
                 <th className="py-2" />
               </tr>
@@ -132,8 +129,10 @@ export function RequestsTable({
                   <td className="py-2 pr-2 font-mono">{r.voucherNo}</td>
                   <td className="py-2 pr-2">{REQUEST_TYPE_LABELS[r.requestType]}</td>
                   <td className="py-2 pr-2">{MINISTRY_TYPE_LABELS[r.ministryType]}</td>
-                  <td className="py-2 pr-2 text-right font-mono">${r.totalAmount}</td>
-                  <td className="py-2 pr-2">{REQUEST_STATUS_LABELS[r.status] ?? r.status}</td>
+                  <td className="py-2 pr-6 text-right font-mono">${r.totalAmount}</td>
+                  <td className="py-2 pr-2">
+                    <RequestStatusBadge status={r.status} />
+                  </td>
                   <td className="py-2 text-right">
                     {(r.status === "DRAFT" ||
                       r.status === "NEEDS_CLARIFICATION" ||

@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { REQUEST_TYPE_LABELS, MINISTRY_TYPE_LABELS, REQUEST_STATUS_LABELS } from "@/lib/request-types";
+import { REQUEST_TYPE_LABELS, MINISTRY_TYPE_LABELS } from "@/lib/request-types";
 import { getApproverRoleLabel } from "@/lib/approval-routing";
+import { RequestStatusBadge } from "@/components/RequestStatusBadge";
 import type { RequestProgressView } from "@/lib/request-data";
 
 // The requester's own read-only view of a submitted (non-editable)
@@ -55,7 +56,9 @@ export function RequestProgressDrawer({
       <div className="flex flex-col gap-6 pt-4">
         <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-2 text-sm">
           <dt className="text-slate-500">Status</dt>
-          <dd>{REQUEST_STATUS_LABELS[data.status] ?? data.status}</dd>
+          <dd>
+            <RequestStatusBadge status={data.status} />
+          </dd>
           <dt className="text-slate-500">Type</dt>
           <dd>{REQUEST_TYPE_LABELS[data.requestType]}</dd>
           <dt className="text-slate-500">Ministry</dt>

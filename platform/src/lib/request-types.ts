@@ -59,19 +59,40 @@ export const MINISTRY_TYPE_LABELS: Record<MinistryTypeValue, string> = {
   OCEANIA_REGIONAL: "Oceania Regional",
 };
 
-// Mirrors the RequestStatus enum (schema.prisma). Only DRAFT, IN_APPROVAL,
-// APPROVED, and REJECTED_RETURNED are reachable through the app today
-// (Finance-side transitions no longer exist -- Finance retired from the
-// app entirely); the rest are included for completeness so the requests
-// table never shows a raw enum value.
-export const REQUEST_STATUS_LABELS: Record<string, string> = {
-  DRAFT: "Draft",
-  SUBMITTED: "Submitted",
-  IN_APPROVAL: "In Approval",
-  APPROVED: "Approved",
-  READY_FOR_PROCESSING: "Ready for Processing",
-  NEEDS_CLARIFICATION: "Needs Clarification",
-  PROCESSING: "Processing",
-  PROCESSED: "Processed",
-  REJECTED_RETURNED: "Rejected / Returned",
+// Mirrors the RequestStatus enum (schema.prisma) -- five values, all of
+// them reachable: a request goes DRAFT -> IN_APPROVAL, then either
+// terminates at APPROVED, or bounces to NEEDS_CLARIFICATION/
+// REJECTED_RETURNED for the requester to fix and resubmit. The old
+// Finance-processing statuses (SUBMITTED/READY_FOR_PROCESSING/PROCESSING/
+// PROCESSED) were removed from the schema entirely 2026-09-02 -- Finance
+// retired from the app, so nothing ever produced them.
+//
+// Single source of truth for status wording/visual language, consumed by
+// RequestStatusBadge.tsx (components/) for the colored badge everywhere
+// the UI shows a request's status (dashboard, request list, request
+// detail, approval screen) -- icon/tone included here rather than
+// duplicated in the component, so there's exactly one place that defines
+// what each status means. "tone" is a semantic bucket, not a literal
+// color, so the badge component owns the actual Tailwind classes.
+export type RequestStatusTone = "neutral" | "active" | "warning" | "success" | "danger";
+
+export interface RequestStatusMeta {
+  label: string;
+  icon: "○" | "●" | "✓" | "×";
+  tone: RequestStatusTone;
+}
+
+export const REQUEST_STATUS_META: Record<string, RequestStatusMeta> = {
+  DRAFT: { label: "Draft", icon: "○", tone: "neutral" },
+  IN_APPROVAL: { label: "Awaiting approval", icon: "●", tone: "active" },
+  NEEDS_CLARIFICATION: { label: "Needs changes", icon: "●", tone: "warning" },
+  APPROVED: { label: "Approved", icon: "✓", tone: "success" },
+  REJECTED_RETURNED: { label: "Rejected", icon: "×", tone: "danger" },
 };
+
+// Plain-text label only, derived from the same source above -- for any
+// non-visual context (e.g. a future notification's plain-text body) that
+// needs consistent wording without pulling in a UI component.
+export const REQUEST_STATUS_LABELS: Record<string, string> = Object.fromEntries(
+  Object.entries(REQUEST_STATUS_META).map(([status, meta]) => [status, meta.label]),
+);

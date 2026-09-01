@@ -20,6 +20,7 @@ import { LineItemManager } from "./LineItemManager";
 import { ReceiptManager } from "./ReceiptManager";
 import { BankDetailsManager } from "./BankDetailsManager";
 import { ErrorBanner } from "@/components/ErrorBanner";
+import { RequestStatusBadge } from "@/components/RequestStatusBadge";
 import type { DraftRequestView } from "@/lib/request-data";
 
 // Sorted alphabetically by label for the dropdowns only -- REQUEST_TYPES/
@@ -91,9 +92,26 @@ export function RequestDrawer(props: RequestDrawerProps) {
       className="fixed inset-y-0 right-0 m-0 h-dvh w-full max-w-xl overflow-y-auto rounded-l-lg bg-white p-6 shadow-xl backdrop:bg-black/40"
     >
       <div className="flex items-center justify-between border-b border-slate-200 pb-4">
-        <h2 id="drawer-title" className="text-lg font-bold text-slate-900">
-          {props.mode === "create" ? "New request" : props.data.voucherNo}
-        </h2>
+        <span className="flex items-center gap-2">
+          <h2 id="drawer-title" className="text-lg font-bold text-slate-900">
+            {props.mode === "create" ? "New request" : props.data.voucherNo}
+          </h2>
+          {/* DraftRequestView doesn't carry a status field directly --
+              getDraftRequest only ever returns DRAFT/NEEDS_CLARIFICATION/
+              REJECTED_RETURNED, and returnReason already distinguishes
+              which, the same way EditContent's own banner below does. */}
+          {props.mode === "edit" && (
+            <RequestStatusBadge
+              status={
+                props.data.returnReason === null
+                  ? "DRAFT"
+                  : props.data.returnReason.decision === "REJECTED"
+                    ? "REJECTED_RETURNED"
+                    : "NEEDS_CLARIFICATION"
+              }
+            />
+          )}
+        </span>
         <button
           type="button"
           onClick={handleClose}
