@@ -34,6 +34,10 @@ enum RequestType {
 // named approvers (Dexter Santiago vs. Moriz Manlangit) -- confirmed each
 // ministry type is assigned its own approver individually, not grouped as
 // the pilot's approval-rules.js did.
+// 2026-09-01: split EVENTS_HOST into EVENTS_RETREAT + HOST -- confirmed
+// these are two distinct ministries with different named overseers (Eland
+// Afuang vs. Lawrence Hernando), same reasoning as the split above. Also
+// fixed the OCEANA_REGIONAL -> OCEANIA_REGIONAL spelling.
 enum MinistryType {
   ADMIN
   EXALT_LIVE_PROD
@@ -42,10 +46,11 @@ enum MinistryType {
   PASTORAL_CARE
   B1G
   ELEVATE
-  EVENTS_HOST
+  EVENTS_RETREAT
+  HOST
   COMMS_MEDIA
   DGM
-  OCEANA_REGIONAL
+  OCEANIA_REGIONAL
 }
 
 enum RequestStatus {

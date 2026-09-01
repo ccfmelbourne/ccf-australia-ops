@@ -1,7 +1,7 @@
 import { Document, Page, View, Text, Image, StyleSheet, renderToBuffer } from "@react-pdf/renderer";
 import { PDFDocument } from "pdf-lib";
 import { REQUEST_TYPES, REQUEST_TYPE_LABELS, MINISTRY_TYPE_LABELS } from "@/lib/request-types";
-import { APPROVER_ROLE_LABELS } from "@/lib/approval-routing";
+import { getApproverRoleLabel } from "@/lib/approval-routing";
 import type { ApproverRoleValue } from "@/lib/approval-routing";
 import type { ApprovedRequestDetail, ApproverDirectory } from "@/lib/request-data";
 
@@ -243,7 +243,7 @@ export function VoucherDocument({
               const waivedByOverride = a.role === "REGIONAL_DIRECTOR" && detail.override !== null;
               return (
                 <View style={styles.approvalCol} key={i}>
-                  <Text style={styles.approvalRoleLabel}>{APPROVER_ROLE_LABELS[a.role]}</Text>
+                  <Text style={styles.approvalRoleLabel}>{getApproverRoleLabel(a.role, detail.ministryType)}</Text>
                   {signature ? (
                     // eslint-disable-next-line jsx-a11y/alt-text -- this is @react-pdf/renderer's PDF-drawing Image, not an HTML <img>; it has no alt prop
                     <Image src={{ data: signature, format: "png" }} style={styles.signatureImage} />
