@@ -770,6 +770,12 @@ export interface RequestProgressView {
   receipts: { filename: string; viewUrl: string }[];
   bankDetails: { accountName: string; bsb: string; accountNumber: string } | null;
   approvals: RequestProgressApprovalView[];
+  // Set only when this reached (or will reach) APPROVED via Ross
+  // Callado's "within budget" confirmation instead of a direct Regional
+  // Director decision -- lets the UI show that role as satisfied rather
+  // than still-pending once the rest of the chain is done (voucher-pdf.tsx
+  // does the same thing for the final voucher).
+  regionalDirectorOverrideConfirmedAt: string | null;
 }
 
 // The requester's own read-only view of a submitted (non-editable)
@@ -829,6 +835,9 @@ export async function getRequestProgress(
         status: a.status,
         decidedAt: a.decidedAt ? a.decidedAt.toISOString() : null,
       })),
+    regionalDirectorOverrideConfirmedAt: r.regionalDirectorOverrideConfirmedAt
+      ? r.regionalDirectorOverrideConfirmedAt.toISOString()
+      : null,
   };
 }
 
