@@ -1,10 +1,7 @@
 // Pure, directly testable -- no network/DB calls. Which approver ROLES a
-// request needs, per the confirmed tier rules (spec 0001). Deliberately
-// does not resolve WHO fills each role (ministry-group-specific named
-// approvers) -- that's a separate, later concern (the approver-facing UI
-// slice), and the pilot's own reference data has real gaps there (no
-// emails, and several role slots have no named person at all), so
-// RequiredApproval rows are created with approverUserId left null.
+// request needs, per the confirmed tier rules (spec 0001, corrected
+// 2026-09-02 after two rounds of walking the real business rule through
+// with the decision-maker -- see COS_POOL below).
 
 import type { MinistryTypeValue } from "@/lib/request-types";
 
@@ -50,29 +47,35 @@ export function getTier(totalAmount: number): ApprovalTier {
   return 4;
 }
 
-// The three fixed committee members for the tier-4 Regional Director
-// override (specs/0001, confirmed with leadership) -- a specific named
-// committee, not "any 3 COS": confirmed against the live ApproverAssignment
-// data that Vamie Pinlac isn't even the currently-assigned COS1/Overseer
-// for any ministry today, so this can't be resolved through
-// ApproverAssignment the way other roles are. Hardcoded by email (matching
-// prisma/seed.ts's NAMED_USERS, where these three are seeded regardless of
-// their current per-ministry assignment) and resolved to User rows by
-// whoever calls requestOverride/overrideApprove (approval-data.ts).
-export const REGIONAL_DIRECTOR_OVERRIDE_COMMITTEE_EMAILS = [
+// COS1/COS2 aren't fixed named slots (COS1 always Ross, COS2 always Joel)
+// -- they're claimable positions open to a shared, org-wide pool of
+// exactly three people. Whoever of the three acts first on a given
+// request's COS1 or COS2 row claims it (approval-data.ts's decideApproval
+// sets approverUserId at decision time, not before); each needed slot must
+// be claimed by a different person. A decline from whoever claims a slot
+// still rejects the whole request, same as every other role -- there's no
+// "try someone else" fallback. Corrected 2026-09-02 after an earlier,
+// wrong fixed-slot-per-person model.
+export const COS_POOL = [
   "rosscallado@gmail.com",
   "joel.jmj@gmail.com",
   "vamiebpinlac@gmail.com",
 ] as const;
 
-// The confirmed rule -- not the pilot's outdated one, which gated the
-// Regional Director requirement to the Oceana ministry group only. Here
-// tier 4 always requires the Regional Director, for every group; the
-// alternative unanimous-3-named-COS override
-// (REGIONAL_DIRECTOR_OVERRIDE_COMMITTEE_EMAILS above) is handled separately
-// by approval-data.ts's requestOverride/overrideApprove, not by this
-// function -- a tier-4 request's RequiredApproval rows always include
-// REGIONAL_DIRECTOR regardless of whether an override is ever pursued.
+// Tier 4's Regional Director requirement can be satisfied two ways: his
+// own direct approval, or the same COS1+COS2 baseline (already required)
+// plus this specific person -- Ross Callado, by name, not "whichever pool
+// member" -- explicitly confirming the request is within budget. See
+// approval-data.ts's confirmRegionalDirectorOverride/isFullyApproved.
+// When to actually invoke this (the decision-maker's guidance: only once
+// Regional Director's been sitting on it a week or more) is Ross's own
+// judgment call, not something the system tracks or enforces.
+export const REGIONAL_DIRECTOR_OVERRIDE_CONFIRMER_EMAIL = "rosscallado@gmail.com";
+
+// Ministry Overseer only applies to tiers 1-2; tier 3/4 requests skip
+// straight to COS-level approval. 1 COS for tier 2, 2 for tier 3 and 4
+// (confirmed 2026-09-02, correcting an earlier "Overseer always applies,
+// 1/2/3 COS by tier" assumption that turned out wrong).
 export function getRequiredApproverRoles(tier: ApprovalTier): ApproverRoleValue[] {
   switch (tier) {
     case 1:

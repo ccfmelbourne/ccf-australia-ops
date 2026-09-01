@@ -1,20 +1,24 @@
 import { redirect } from "next/navigation";
 import { getCurrentUserId } from "@/lib/user-session";
-import { getMyRequests, getDraftRequest, getRequestProgress, getOverrideOpportunities } from "@/lib/request-data";
+import {
+  getMyRequests,
+  getDraftRequest,
+  getRequestProgress,
+  getRegionalDirectorOverrideOpportunities,
+} from "@/lib/request-data";
 import { getPendingApprovalsForUser } from "@/lib/approval-data";
 import { RequestsTable } from "@/components/requests/RequestsTable";
 import { ApprovalsTable } from "@/components/approvals/ApprovalsTable";
-import { OverrideOpportunities } from "@/components/approvals/OverrideOpportunities";
+import { RegionalDirectorOverride } from "@/components/approvals/RegionalDirectorOverride";
 
 export const dynamic = "force-dynamic";
 
 // Single landing page after sign-in: approvals awaiting this person (if
 // any) above their own requests table -- one person can be both a
 // requester and an approver, so both need to be visible without switching
-// pages. Override opportunities (tier-4 committee override) are similarly
-// scoped to whoever's signed in -- getOverrideOpportunities returns []
-// for anyone who isn't one of the three fixed committee members, so most
-// users never see that section at all.
+// pages. The Regional Director override section is similarly scoped to
+// whoever's signed in -- getRegionalDirectorOverrideOpportunities returns
+// [] for anyone who isn't Ross Callado, so almost no one ever sees it.
 export default async function RequestsPage(props: PageProps<"/requests">) {
   const userId = await getCurrentUserId();
   if (!userId) {
@@ -30,12 +34,12 @@ export default async function RequestsPage(props: PageProps<"/requests">) {
     openId ? getDraftRequest(openId, userId) : Promise.resolve(null),
     progressId ? getRequestProgress(progressId, userId) : Promise.resolve(null),
     getPendingApprovalsForUser(userId),
-    getOverrideOpportunities(userId),
+    getRegionalDirectorOverrideOpportunities(userId),
   ]);
 
   return (
     <div className="flex flex-col gap-8">
-      <OverrideOpportunities opportunities={overrideOpportunities} />
+      <RegionalDirectorOverride opportunities={overrideOpportunities} />
       <ApprovalsTable approvals={approvals} />
       <RequestsTable requests={requests} openRequest={openRequest} progressRequest={progressRequest} />
     </div>

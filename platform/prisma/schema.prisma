@@ -65,6 +65,15 @@ enum RequestStatus {
   REJECTED_RETURNED
 }
 
+// COS1/COS2 aren't ministry-specific or person-specific slots -- they're
+// two claimable positions, open to any of a shared pool of exactly three
+// people (Ross Callado, Joel Jerez, Vamie Pinlac -- approval-routing.ts's
+// COS_POOL). RequiredApproval rows for these roles are created with
+// approverUserId null and get claimed (approverUserId set) by whichever
+// pool member decides them first -- see approval-data.ts's decideApproval.
+// Corrected 2026-09-02 from an earlier, wrong fixed-slot-per-person model
+// (which briefly also had a COS3, since removed -- tier 4 only ever needs
+// the same 2 COS slots as tier 3, not a third).
 enum ApproverRole {
   MINISTRY_OVERSEER
   COS1
@@ -92,7 +101,6 @@ model User {
 
   requestsMade        ReimbursementRequest[] @relation("Requester")
   approvals           RequiredApproval[]
-  overrideApprovals   OverrideApproval[]
   auditEntries        AuditLogEntry[]
   approverAssignments ApproverAssignment[]
 }
@@ -114,8 +122,15 @@ model ReimbursementRequest {
   receipts          Receipt[]
   bankDetails       BankDetails?
   requiredApprovals RequiredApproval[]
-  regionalOverride  RegionalDirectorOverride?
   auditLog          AuditLogEntry[]
+
+  // Set only when Ross Callado (approval-routing.ts's
+  // REGIONAL_DIRECTOR_OVERRIDE_CONFIRMER_EMAIL) explicitly confirms a
+  // tier-4 request is within budget, as an alternative to waiting on
+  // direct Regional Director approval -- see approval-data.ts's
+  // confirmRegionalDirectorOverride/isFullyApproved. Requires COS1+COS2
+  // (already required for tier 4 regardless) to both be APPROVED first.
+  regionalDirectorOverrideConfirmedAt DateTime?
 }
 
 model LineItem {
@@ -167,43 +182,12 @@ model RequiredApproval {
   @@unique([reimbursementRequestId, role])
 }
 
-// Tier-4 (>$5,000) alternative to the REGIONAL_DIRECTOR RequiredApproval
-// row -- confirmed with leadership (specs/0001, "Regional Director approval
-// & COS override"): only created if the requester or one of the three
-// named committee members (hardcoded in approval-routing.ts, not resolved
-// via ApproverAssignment -- this is a fixed committee, not "any 3 COS")
-// chooses to pursue it instead of waiting on the Regional Director.
-// withinBudget flips true only once all 3 OverrideApproval rows are
-// approved -- their unanimous approval *is* the within-budget attestation,
-// no separate budget-plan lookup (per spec 0001).
-model RegionalDirectorOverride {
-  id                     String               @id @default(cuid())
-  reimbursementRequestId String               @unique
-  request                ReimbursementRequest @relation(fields: [reimbursementRequestId], references: [id], onDelete: Cascade)
-  withinBudget           Boolean              @default(false)
-  createdAt              DateTime             @default(now())
-
-  approvals              OverrideApproval[]
-}
-
-// Exactly three rows per override, one each for the fixed committee.
-model OverrideApproval {
-  id             String                   @id @default(cuid())
-  overrideId     String
-  override       RegionalDirectorOverride @relation(fields: [overrideId], references: [id], onDelete: Cascade)
-  approverUserId String
-  approver       User                     @relation(fields: [approverUserId], references: [id])
-  approved       Boolean                  @default(false)
-  decidedAt      DateTime?
-
-  @@unique([overrideId, approverUserId])
-}
-
-// Static reference data: which User fills a given approver role, either
-// for a specific ministry (MINISTRY_OVERSEER/COS1) or org-wide
-// (FINANCE_OVERSEER/REGIONAL_DIRECTOR, ministryType null). No COS2 rows
-// exist for any ministry -- confirmed there is currently no one in that
-// slot anywhere, not a gap in this table. Resolved once, at Submit time --
+// Static reference data: which User fills a given approver role. Only
+// MINISTRY_OVERSEER (ministry-specific) and FINANCE_OVERSEER/
+// REGIONAL_DIRECTOR (org-wide, ministryType null) are pre-resolved here.
+// COS1/COS2 are deliberately absent -- they're claimable positions open to
+// any of approval-routing.ts's COS_POOL, not a single pre-assigned person
+// (see request-data.ts's resolveApprover). Resolved once, at Submit time --
 // reassigning someone here does not retroactively change who's on an
 // already-submitted request's approval chain.
 //

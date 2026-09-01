@@ -6,7 +6,7 @@ import {
   getTier,
   getRequiredApproverRoles,
   APPROVER_ROLES,
-  REGIONAL_DIRECTOR_OVERRIDE_COMMITTEE_EMAILS,
+  REGIONAL_DIRECTOR_OVERRIDE_CONFIRMER_EMAIL,
 } from "@/lib/approval-routing";
 import type { ApproverRoleValue, ApprovalTier } from "@/lib/approval-routing";
 import type { RequestTypeValue, MinistryTypeValue } from "@/lib/request-types";
@@ -78,6 +78,7 @@ export interface ApprovedRequestDetailLineItem {
 
 export interface ApprovedRequestDetailApproval {
   role: ApproverRoleValue;
+  status: string;
   approverName: string | null;
   decidedAt: string | null; // ISO date
   signatureStorageKey: string | null;
@@ -100,16 +101,6 @@ export interface ApproverDirectoryMinistryEntry {
 
 export type ApproverDirectory = ApproverDirectoryMinistryEntry[];
 
-// Set only when this request was approved via the tier-4 committee
-// override (specs/0001) instead of a direct Regional Director approval --
-// voucher-pdf.tsx uses this to represent that column accurately (the
-// REGIONAL_DIRECTOR row in `approvals` stays genuinely PENDING forever in
-// this case, since nobody named Ptr. Ryan Escobar ever actually decided
-// it -- that's correct data, not a bug).
-export interface ApprovedRequestDetailOverride {
-  committee: { approverName: string; decidedAt: string }[];
-}
-
 export interface ApprovedRequestDetail {
   id: string;
   voucherNo: string;
@@ -125,7 +116,10 @@ export interface ApprovedRequestDetail {
   receipts: { storageKey: string; filename: string }[];
   approvals: ApprovedRequestDetailApproval[];
   approverDirectory: ApproverDirectory;
-  override: ApprovedRequestDetailOverride | null;
+  // Set only when this reached APPROVED via Ross Callado's "within budget"
+  // confirmation instead of a direct Regional Director decision --
+  // approval-data.ts's confirmRegionalDirectorOverride/isFullyApproved.
+  regionalDirectorOverrideConfirmedAt: string | null; // ISO date
 }
 
 export interface RequestListItemView {
@@ -338,18 +332,20 @@ export async function deleteDraftRequest(
   };
 }
 
-// FINANCE_OVERSEER/REGIONAL_DIRECTOR are assigned org-wide (ministryType:
-// null in ApproverAssignment); MINISTRY_OVERSEER/COS1 are assigned per the
-// request's own ministry. COS2 is never looked up -- no assignment exists
-// for it anywhere (confirmed: no one currently holds a second-COS slot for
-// any ministry), so it's always left unassigned.
+// COS1/COS2 are deliberately never resolved here -- they're claimable
+// positions open to any of approval-routing.ts's COS_POOL, not a single
+// pre-assigned person. Their RequiredApproval rows are created with
+// approverUserId null and get claimed at decision time (approval-data.ts's
+// decideApproval). FINANCE_OVERSEER/REGIONAL_DIRECTOR are assigned
+// org-wide (ministryType: null); MINISTRY_OVERSEER per the request's own
+// ministry.
 const ORG_WIDE_ROLES = new Set(["FINANCE_OVERSEER", "REGIONAL_DIRECTOR"]);
 
 async function resolveApprover(
   role: ApproverRoleValue,
   ministryType: MinistryTypeValue,
 ): Promise<string | null> {
-  if (role === "COS2") return null;
+  if (role === "COS1" || role === "COS2") return null;
   const assignment = await prisma.approverAssignment.findFirst({
     where: ORG_WIDE_ROLES.has(role) ? { role, ministryType: null } : { role, ministryType },
   });
@@ -404,10 +400,22 @@ export async function submitRequest(requestId: string, requesterId: string): Pro
     roles.map((role) => resolveApprover(role, request.ministryType)),
   );
 
+  // COS1/COS2 are claimable, not pre-resolved (resolveApprover always
+  // returns null for them) -- comparing approverUserId for those would
+  // always mismatch once a slot's been claimed, forcing a needless full
+  // reset. "Preserved" for a claimable role just means it's still in the
+  // recomputed role set; who claimed it (if anyone) is a runtime fact, not
+  // something resubmission should second-guess.
+  const CLAIMABLE_ROLES = new Set(["COS1", "COS2"]);
   const existingByRole = new Map(request.requiredApprovals.map((a) => [a.role, a]));
   const canPreserve =
     existingByRole.size === roles.length &&
-    roles.every((role, i) => existingByRole.get(role)?.approverUserId === approverUserIds[i]);
+    roles.every((role, i) => {
+      const existing = existingByRole.get(role);
+      if (!existing) return false;
+      if (CLAIMABLE_ROLES.has(role)) return true;
+      return existing.approverUserId === approverUserIds[i];
+    });
 
   const requestUpdate = prisma.reimbursementRequest.update({
     where: { id: requestId },
@@ -416,13 +424,22 @@ export async function submitRequest(requestId: string, requesterId: string): Pro
 
   if (canPreserve) {
     // Only rows that aren't already APPROVED get reset -- an approver who
-    // already signed off is never asked to look again.
+    // already signed off is never asked to look again. A previously
+    // REJECTED claimable row also has its claim cleared (approverUserId
+    // back to null) so it's genuinely open to any pool member again, not
+    // silently re-offered only to whoever declined it last time.
     const rowsToReset = request.requiredApprovals.filter((a) => a.status !== "APPROVED");
     await prisma.$transaction([
       ...rowsToReset.map((a) =>
         prisma.requiredApproval.update({
           where: { id: a.id },
-          data: { status: "PENDING", decidedAt: null, comments: null, signatureStorageKey: null },
+          data: {
+            status: "PENDING",
+            decidedAt: null,
+            comments: null,
+            signatureStorageKey: null,
+            approverUserId: CLAIMABLE_ROLES.has(a.role) ? null : a.approverUserId,
+          },
         }),
       ),
       requestUpdate,
@@ -430,10 +447,6 @@ export async function submitRequest(requestId: string, requesterId: string): Pro
   } else {
     await prisma.$transaction([
       prisma.requiredApproval.deleteMany({ where: { reimbursementRequestId: requestId } }),
-      // A stale tier-4 override (if any) can't be trusted for a materially
-      // different request -- same reasoning as resetting RequiredApproval
-      // rows above. Cascades its OverrideApproval rows. No-op if none exists.
-      prisma.regionalDirectorOverride.deleteMany({ where: { reimbursementRequestId: requestId } }),
       ...roles.map((role, i) =>
         prisma.requiredApproval.create({
           data: {
@@ -444,7 +457,13 @@ export async function submitRequest(requestId: string, requesterId: string): Pro
           },
         }),
       ),
-      requestUpdate,
+      // A stale Regional Director override confirmation (if any) can't be
+      // trusted for a materially different request -- same reasoning as
+      // resetting RequiredApproval rows above.
+      prisma.reimbursementRequest.update({
+        where: { id: requestId },
+        data: { status: "IN_APPROVAL", submittedAt: new Date(), regionalDirectorOverrideConfirmedAt: null },
+      }),
     ]);
   }
 
@@ -480,7 +499,6 @@ export async function getApprovedRequestDetail(
       receipts: true,
       bankDetails: true,
       requiredApprovals: { include: { approver: true } },
-      regionalOverride: { include: { approvals: { include: { approver: true } } } },
     },
   });
   if (!r || !r.bankDetails) return null;
@@ -514,27 +532,15 @@ export async function getApprovedRequestDetail(
       .sort((a, b) => APPROVER_ROLES.indexOf(a.role) - APPROVER_ROLES.indexOf(b.role))
       .map((a) => ({
         role: a.role,
+        status: a.status,
         approverName: a.approver?.name ?? null,
         decidedAt: a.decidedAt ? a.decidedAt.toISOString() : null,
         signatureStorageKey: a.signatureStorageKey,
       })),
     approverDirectory,
-    // A request can only reach APPROVED via the override path if
-    // withinBudget flipped true (all 3 unanimous) -- see
-    // approval-data.ts's isFullyApproved. A requested-but-not-yet-unanimous
-    // override never gets here, since the request wouldn't be APPROVED yet.
-    override:
-      r.regionalOverride?.withinBudget
-        ? {
-            committee: r.regionalOverride.approvals.map((a) => ({
-              approverName: a.approver.name,
-              // Non-null by construction: withinBudget only ever flips true
-              // once every row's approved+decidedAt are both set together
-              // (approval-data.ts's overrideApprove).
-              decidedAt: a.decidedAt!.toISOString(),
-            })),
-          }
-        : null,
+    regionalDirectorOverrideConfirmedAt: r.regionalDirectorOverrideConfirmedAt
+      ? r.regionalDirectorOverrideConfirmedAt.toISOString()
+      : null,
   };
 }
 
@@ -695,17 +701,6 @@ export interface RequestProgressApprovalView {
   decidedAt: string | null; // ISO date
 }
 
-export interface RequestProgressOverrideCommitteeView {
-  approverName: string;
-  approved: boolean;
-  decidedAt: string | null; // ISO date -- null means still undecided (not "declined")
-}
-
-export interface RequestProgressOverrideView {
-  withinBudget: boolean;
-  committee: RequestProgressOverrideCommitteeView[];
-}
-
 export interface RequestProgressView {
   id: string;
   voucherNo: string;
@@ -718,11 +713,6 @@ export interface RequestProgressView {
   receipts: { filename: string; viewUrl: string }[];
   bankDetails: { accountName: string; bsb: string; accountNumber: string } | null;
   approvals: RequestProgressApprovalView[];
-  // UI hint only -- requestOverride (approval-data.ts) does its own full
-  // authorization check regardless, this just decides whether to show the
-  // button at all.
-  canRequestOverride: boolean;
-  override: RequestProgressOverrideView | null;
 }
 
 // The requester's own read-only view of a submitted (non-editable)
@@ -740,7 +730,6 @@ export async function getRequestProgress(
       receipts: true,
       bankDetails: true,
       requiredApprovals: { include: { approver: true } },
-      regionalOverride: { include: { approvals: { include: { approver: true } } } },
     },
   });
   if (!r) return null;
@@ -753,8 +742,6 @@ export async function getRequestProgress(
   );
 
   const tier = getTier(Number(r.totalAmount));
-  const regionalRow = r.requiredApprovals.find((a) => a.role === "REGIONAL_DIRECTOR");
-  const canRequestOverride = tier === 4 && !r.regionalOverride && regionalRow?.status === "PENDING";
 
   return {
     id: r.id,
@@ -785,70 +772,56 @@ export async function getRequestProgress(
         status: a.status,
         decidedAt: a.decidedAt ? a.decidedAt.toISOString() : null,
       })),
-    canRequestOverride,
-    override: r.regionalOverride
-      ? {
-          withinBudget: r.regionalOverride.withinBudget,
-          committee: r.regionalOverride.approvals.map((a) => ({
-            approverName: a.approver.name,
-            approved: a.approved,
-            decidedAt: a.decidedAt ? a.decidedAt.toISOString() : null,
-          })),
-        }
-      : null,
   };
 }
 
-export interface OverrideOpportunityView {
+export interface RegionalDirectorOverrideOpportunityView {
   requestId: string;
   voucherNo: string;
   requesterName: string;
   ministryType: MinistryTypeValue;
   totalAmount: string; // formatted
-  overrideRequested: boolean;
-  // Set only once an override exists for this request -- lets this
-  // committee member cast their vote directly from the opportunities list
-  // without a separate lookup.
-  myOverrideApprovalId: string | null;
-  myVote: boolean | null; // null = undecided (or override doesn't exist yet)
 }
 
-// The three committee members aren't necessarily a RequiredApproval row on
-// any given tier-4 request (their per-ministry role assignments are
-// separate from this fixed committee), so they'd otherwise have no way to
-// even discover a request eligible for the override on the normal
-// /approvals page. Returns [] for anyone who isn't one of the three.
-export async function getOverrideOpportunities(userId: string): Promise<OverrideOpportunityView[]> {
-  const committeeUsers = await prisma.user.findMany({
-    where: { email: { in: [...REGIONAL_DIRECTOR_OVERRIDE_COMMITTEE_EMAILS] } },
+// Ross Callado isn't necessarily a RequiredApproval row on a given
+// tier-4 request (he only shows up there if he happens to claim COS1 or
+// COS2 himself), so he'd otherwise have no way to discover a request
+// eligible for his "within budget" confirmation. Returns [] for anyone
+// who isn't him. confirmRegionalDirectorOverride (approval-data.ts) does
+// the real authorization + precondition check regardless -- this is just
+// what decides whether to show the button at all.
+export async function getRegionalDirectorOverrideOpportunities(
+  userId: string,
+): Promise<RegionalDirectorOverrideOpportunityView[]> {
+  const confirmer = await prisma.user.findUnique({
+    where: { email: REGIONAL_DIRECTOR_OVERRIDE_CONFIRMER_EMAIL },
   });
-  if (!committeeUsers.some((u) => u.id === userId)) return [];
+  if (!confirmer || confirmer.id !== userId) return [];
 
   const requests = await prisma.reimbursementRequest.findMany({
     where: {
       status: "IN_APPROVAL",
-      requiredApprovals: { some: { role: "REGIONAL_DIRECTOR", status: "PENDING" } },
+      regionalDirectorOverrideConfirmedAt: null,
+      requiredApprovals: {
+        some: { role: "REGIONAL_DIRECTOR", status: "PENDING" },
+      },
     },
-    include: {
-      requester: true,
-      regionalOverride: { include: { approvals: true } },
-    },
+    include: { requester: true, requiredApprovals: true },
     orderBy: { submittedAt: "asc" },
   });
 
   return requests
     .filter((r) => getTier(Number(r.totalAmount)) === 4)
-    .map((r) => {
-      const myRow = r.regionalOverride?.approvals.find((a) => a.approverUserId === userId) ?? null;
-      return {
-        requestId: r.id,
-        voucherNo: r.voucherNo,
-        requesterName: r.requester.name,
-        ministryType: r.ministryType,
-        totalAmount: formatAmount(r.totalAmount),
-        overrideRequested: !!r.regionalOverride,
-        myOverrideApprovalId: myRow?.id ?? null,
-        myVote: myRow?.decidedAt ? myRow.approved : null,
-      };
-    });
+    .filter((r) => {
+      const cos1 = r.requiredApprovals.find((a) => a.role === "COS1");
+      const cos2 = r.requiredApprovals.find((a) => a.role === "COS2");
+      return cos1?.status === "APPROVED" && cos2?.status === "APPROVED";
+    })
+    .map((r) => ({
+      requestId: r.id,
+      voucherNo: r.voucherNo,
+      requesterName: r.requester.name,
+      ministryType: r.ministryType,
+      totalAmount: formatAmount(r.totalAmount),
+    }));
 }

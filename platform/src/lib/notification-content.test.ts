@@ -19,13 +19,14 @@ const baseDetail: ApprovedRequestDetail = {
   approvals: [
     {
       role: "MINISTRY_OVERSEER",
+      status: "APPROVED",
       approverName: "Approver One",
       decidedAt: "2026-08-31T00:00:00.000Z",
       signatureStorageKey: "signatures/approval-1/abc.png",
     },
   ],
   approverDirectory: [{ ministryType: "ADMIN", overseerName: "Approver One" }],
-  override: null,
+  regionalDirectorOverrideConfirmedAt: null,
 };
 
 test("buildApprovedRequestEmail includes the voucher number, requester, and total", () => {

@@ -1,11 +1,8 @@
 "use client";
 
-import { useEffect, useRef, useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
-import { requestOverrideAction } from "@/app/requests/actions";
+import { useEffect, useRef } from "react";
 import { REQUEST_TYPE_LABELS, MINISTRY_TYPE_LABELS, REQUEST_STATUS_LABELS } from "@/lib/request-types";
 import { getApproverRoleLabel } from "@/lib/approval-routing";
-import { ErrorBanner } from "@/components/ErrorBanner";
 import type { RequestProgressView } from "@/lib/request-data";
 
 // The requester's own read-only view of a submitted (non-editable)
@@ -20,10 +17,7 @@ export function RequestProgressDrawer({
   data: RequestProgressView;
   onClose: () => void;
 }) {
-  const router = useRouter();
   const dialogRef = useRef<HTMLDialogElement>(null);
-  const [isPending, startTransition] = useTransition();
-  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const dialog = dialogRef.current;
@@ -32,18 +26,6 @@ export function RequestProgressDrawer({
 
   function handleClose() {
     dialogRef.current?.close();
-  }
-
-  function handleRequestOverride() {
-    setError(null);
-    startTransition(async () => {
-      const result = await requestOverrideAction(data.id);
-      if (result.ok) {
-        router.refresh();
-      } else {
-        setError(result.error ?? "Something went wrong.");
-      }
-    });
   }
 
   return (
@@ -163,45 +145,6 @@ export function RequestProgressDrawer({
             ))}
           </ul>
         </div>
-
-        {data.tier === 4 && (
-          <div className="rounded-md border border-amber-200 bg-amber-50 p-4 text-sm">
-            <p className="mb-2 font-semibold text-amber-800">
-              Over $5,000: Regional Director or Committee Override
-            </p>
-            {data.override ? (
-              <ul className="flex flex-col gap-1">
-                {data.override.committee.map((c, i) => (
-                  <li key={i} className="flex justify-between">
-                    <span>{c.approverName}</span>
-                    <span className="text-slate-600">
-                      {c.decidedAt === null ? "Pending" : c.approved ? "Approved" : "Declined"}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            ) : data.canRequestOverride ? (
-              <>
-                <p className="mb-2 text-amber-700">
-                  Waiting on the Regional Director. If this request is within this FY&apos;s
-                  approved budget, you can request the committee override instead.
-                </p>
-                <button
-                  type="button"
-                  disabled={isPending}
-                  onClick={handleRequestOverride}
-                  className="rounded-md border border-amber-400 px-3 py-1.5 text-sm font-semibold text-amber-800 hover:bg-amber-100 disabled:opacity-60"
-                >
-                  {isPending ? "Requesting…" : "Request Committee Override"}
-                </button>
-              </>
-            ) : (
-              <p className="text-amber-700">Waiting on the Regional Director.</p>
-            )}
-          </div>
-        )}
-
-        {error && <ErrorBanner message={error} />}
       </div>
     </dialog>
   );
