@@ -57,31 +57,33 @@ export function LineItemManager({
         {lineItems.length === 0 ? (
           <p className="text-sm text-slate-500">No line items yet.</p>
         ) : (
-          <table className="w-full border-collapse text-sm">
-            <tbody>
-              {lineItems.map((li) => (
-                <tr key={li.id} className="border-b border-slate-100">
-                  <td className="py-2">{li.description}</td>
-                  <td className="py-2 text-right font-mono">${li.amount}</td>
-                  <td className="py-2 pl-2 text-right">
-                    <button
-                      type="button"
-                      disabled={isPending}
-                      onClick={() => handleRemove(li.id)}
-                      className="text-xs text-red-600 hover:underline disabled:opacity-60"
-                    >
-                      Remove
-                    </button>
-                  </td>
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[360px] border-collapse text-sm">
+              <tbody>
+                {lineItems.map((li) => (
+                  <tr key={li.id} className="border-b border-slate-100">
+                    <td className="py-2">{li.description}</td>
+                    <td className="py-2 text-right font-mono">${li.amount}</td>
+                    <td className="py-2 pl-2 text-right">
+                      <button
+                        type="button"
+                        disabled={isPending}
+                        onClick={() => handleRemove(li.id)}
+                        className="text-xs text-red-600 hover:underline disabled:opacity-60"
+                      >
+                        Remove
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+                <tr>
+                  <td className="py-2 font-semibold">Total</td>
+                  <td className="py-2 text-right font-mono font-semibold">${totalAmount}</td>
+                  <td />
                 </tr>
-              ))}
-              <tr>
-                <td className="py-2 font-semibold">Total</td>
-                <td className="py-2 text-right font-mono font-semibold">${totalAmount}</td>
-                <td />
-              </tr>
-            </tbody>
-          </table>
+              </tbody>
+            </table>
+          </div>
         )}
       </section>
 

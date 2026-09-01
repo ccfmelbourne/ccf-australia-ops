@@ -2,7 +2,12 @@ import { prisma } from "@/lib/prisma";
 import { formatAmount } from "@/lib/money";
 import { getReceiptDownloadUrl } from "@/lib/receipt-storage";
 import { normalizeBsb, formatBsb, assertValidAccountNumber } from "@/lib/bank-details";
-import { getTier, getRequiredApproverRoles, APPROVER_ROLES } from "@/lib/approval-routing";
+import {
+  getTier,
+  getRequiredApproverRoles,
+  APPROVER_ROLES,
+  REGIONAL_DIRECTOR_OVERRIDE_COMMITTEE_EMAILS,
+} from "@/lib/approval-routing";
 import type { ApproverRoleValue, ApprovalTier } from "@/lib/approval-routing";
 import type { RequestTypeValue, MinistryTypeValue } from "@/lib/request-types";
 import { MINISTRY_TYPES } from "@/lib/request-types";
@@ -95,6 +100,16 @@ export interface ApproverDirectoryMinistryEntry {
 
 export type ApproverDirectory = ApproverDirectoryMinistryEntry[];
 
+// Set only when this request was approved via the tier-4 committee
+// override (specs/0001) instead of a direct Regional Director approval --
+// voucher-pdf.tsx uses this to represent that column accurately (the
+// REGIONAL_DIRECTOR row in `approvals` stays genuinely PENDING forever in
+// this case, since nobody named Ptr. Ryan Escobar ever actually decided
+// it -- that's correct data, not a bug).
+export interface ApprovedRequestDetailOverride {
+  committee: { approverName: string; decidedAt: string }[];
+}
+
 export interface ApprovedRequestDetail {
   id: string;
   voucherNo: string;
@@ -110,6 +125,7 @@ export interface ApprovedRequestDetail {
   receipts: { storageKey: string; filename: string }[];
   approvals: ApprovedRequestDetailApproval[];
   approverDirectory: ApproverDirectory;
+  override: ApprovedRequestDetailOverride | null;
 }
 
 export interface RequestListItemView {
@@ -146,7 +162,7 @@ export async function createDraftRequest(
   requesterId: string,
   requestType: RequestTypeValue,
   ministryType: MinistryTypeValue,
-): Promise<{ id: string }> {
+): Promise<{ id: string; voucherNo: string }> {
   const voucherNo = await nextVoucherNo();
   // Array-form transaction -- each op is independent, no op needs to read
   // another's result first.
@@ -170,7 +186,7 @@ export async function createDraftRequest(
       details: { requestType, ministryType },
     },
   });
-  return { id: request.id };
+  return { id: request.id, voucherNo: request.voucherNo };
 }
 
 // A request is editable by its own requester in exactly three statuses:
@@ -414,6 +430,10 @@ export async function submitRequest(requestId: string, requesterId: string): Pro
   } else {
     await prisma.$transaction([
       prisma.requiredApproval.deleteMany({ where: { reimbursementRequestId: requestId } }),
+      // A stale tier-4 override (if any) can't be trusted for a materially
+      // different request -- same reasoning as resetting RequiredApproval
+      // rows above. Cascades its OverrideApproval rows. No-op if none exists.
+      prisma.regionalDirectorOverride.deleteMany({ where: { reimbursementRequestId: requestId } }),
       ...roles.map((role, i) =>
         prisma.requiredApproval.create({
           data: {
@@ -460,6 +480,7 @@ export async function getApprovedRequestDetail(
       receipts: true,
       bankDetails: true,
       requiredApprovals: { include: { approver: true } },
+      regionalOverride: { include: { approvals: { include: { approver: true } } } },
     },
   });
   if (!r || !r.bankDetails) return null;
@@ -498,6 +519,22 @@ export async function getApprovedRequestDetail(
         signatureStorageKey: a.signatureStorageKey,
       })),
     approverDirectory,
+    // A request can only reach APPROVED via the override path if
+    // withinBudget flipped true (all 3 unanimous) -- see
+    // approval-data.ts's isFullyApproved. A requested-but-not-yet-unanimous
+    // override never gets here, since the request wouldn't be APPROVED yet.
+    override:
+      r.regionalOverride?.withinBudget
+        ? {
+            committee: r.regionalOverride.approvals.map((a) => ({
+              approverName: a.approver.name,
+              // Non-null by construction: withinBudget only ever flips true
+              // once every row's approved+decidedAt are both set together
+              // (approval-data.ts's overrideApprove).
+              decidedAt: a.decidedAt!.toISOString(),
+            })),
+          }
+        : null,
   };
 }
 
@@ -644,4 +681,174 @@ export async function removeReceiptRecord(
   }
   await prisma.receipt.delete({ where: { id: receiptId } });
   return { storageKey: receipt.storageKey };
+}
+
+export interface RequestProgressLineItemView {
+  description: string;
+  amount: string; // formatted
+}
+
+export interface RequestProgressApprovalView {
+  role: ApproverRoleValue;
+  approverName: string | null;
+  status: string;
+  decidedAt: string | null; // ISO date
+}
+
+export interface RequestProgressOverrideCommitteeView {
+  approverName: string;
+  approved: boolean;
+  decidedAt: string | null; // ISO date -- null means still undecided (not "declined")
+}
+
+export interface RequestProgressOverrideView {
+  withinBudget: boolean;
+  committee: RequestProgressOverrideCommitteeView[];
+}
+
+export interface RequestProgressView {
+  id: string;
+  voucherNo: string;
+  requestType: RequestTypeValue;
+  ministryType: MinistryTypeValue;
+  totalAmount: string; // formatted
+  status: string;
+  tier: ApprovalTier;
+  lineItems: RequestProgressLineItemView[];
+  receipts: { filename: string; viewUrl: string }[];
+  bankDetails: { accountName: string; bsb: string; accountNumber: string } | null;
+  approvals: RequestProgressApprovalView[];
+  // UI hint only -- requestOverride (approval-data.ts) does its own full
+  // authorization check regardless, this just decides whether to show the
+  // button at all.
+  canRequestOverride: boolean;
+  override: RequestProgressOverrideView | null;
+}
+
+// The requester's own read-only view of a submitted (non-editable)
+// request -- there was previously no UI at all for this; RequestsTable
+// only ever showed Edit/Delete for editable statuses, so a submitted
+// request was otherwise invisible until it resolved.
+export async function getRequestProgress(
+  requestId: string,
+  requesterId: string,
+): Promise<RequestProgressView | null> {
+  const r = await prisma.reimbursementRequest.findFirst({
+    where: { id: requestId, requesterId },
+    include: {
+      lineItems: true,
+      receipts: true,
+      bankDetails: true,
+      requiredApprovals: { include: { approver: true } },
+      regionalOverride: { include: { approvals: { include: { approver: true } } } },
+    },
+  });
+  if (!r) return null;
+
+  const receipts = await Promise.all(
+    r.receipts.map(async (rec) => ({
+      filename: receiptFilename(rec.storageKey),
+      viewUrl: await getReceiptDownloadUrl(rec.storageKey),
+    })),
+  );
+
+  const tier = getTier(Number(r.totalAmount));
+  const regionalRow = r.requiredApprovals.find((a) => a.role === "REGIONAL_DIRECTOR");
+  const canRequestOverride = tier === 4 && !r.regionalOverride && regionalRow?.status === "PENDING";
+
+  return {
+    id: r.id,
+    voucherNo: r.voucherNo,
+    requestType: r.requestType,
+    ministryType: r.ministryType,
+    totalAmount: formatAmount(r.totalAmount),
+    status: r.status,
+    tier,
+    lineItems: r.lineItems.map((li) => ({
+      description: li.description,
+      amount: formatAmount(li.amount),
+    })),
+    receipts,
+    bankDetails: r.bankDetails
+      ? {
+          accountName: r.bankDetails.accountName,
+          bsb: formatBsb(r.bankDetails.bsb),
+          accountNumber: r.bankDetails.accountNumber,
+        }
+      : null,
+    approvals: r.requiredApprovals
+      .slice()
+      .sort((a, b) => APPROVER_ROLES.indexOf(a.role) - APPROVER_ROLES.indexOf(b.role))
+      .map((a) => ({
+        role: a.role,
+        approverName: a.approver?.name ?? null,
+        status: a.status,
+        decidedAt: a.decidedAt ? a.decidedAt.toISOString() : null,
+      })),
+    canRequestOverride,
+    override: r.regionalOverride
+      ? {
+          withinBudget: r.regionalOverride.withinBudget,
+          committee: r.regionalOverride.approvals.map((a) => ({
+            approverName: a.approver.name,
+            approved: a.approved,
+            decidedAt: a.decidedAt ? a.decidedAt.toISOString() : null,
+          })),
+        }
+      : null,
+  };
+}
+
+export interface OverrideOpportunityView {
+  requestId: string;
+  voucherNo: string;
+  requesterName: string;
+  ministryType: MinistryTypeValue;
+  totalAmount: string; // formatted
+  overrideRequested: boolean;
+  // Set only once an override exists for this request -- lets this
+  // committee member cast their vote directly from the opportunities list
+  // without a separate lookup.
+  myOverrideApprovalId: string | null;
+  myVote: boolean | null; // null = undecided (or override doesn't exist yet)
+}
+
+// The three committee members aren't necessarily a RequiredApproval row on
+// any given tier-4 request (their per-ministry role assignments are
+// separate from this fixed committee), so they'd otherwise have no way to
+// even discover a request eligible for the override on the normal
+// /approvals page. Returns [] for anyone who isn't one of the three.
+export async function getOverrideOpportunities(userId: string): Promise<OverrideOpportunityView[]> {
+  const committeeUsers = await prisma.user.findMany({
+    where: { email: { in: [...REGIONAL_DIRECTOR_OVERRIDE_COMMITTEE_EMAILS] } },
+  });
+  if (!committeeUsers.some((u) => u.id === userId)) return [];
+
+  const requests = await prisma.reimbursementRequest.findMany({
+    where: {
+      status: "IN_APPROVAL",
+      requiredApprovals: { some: { role: "REGIONAL_DIRECTOR", status: "PENDING" } },
+    },
+    include: {
+      requester: true,
+      regionalOverride: { include: { approvals: true } },
+    },
+    orderBy: { submittedAt: "asc" },
+  });
+
+  return requests
+    .filter((r) => getTier(Number(r.totalAmount)) === 4)
+    .map((r) => {
+      const myRow = r.regionalOverride?.approvals.find((a) => a.approverUserId === userId) ?? null;
+      return {
+        requestId: r.id,
+        voucherNo: r.voucherNo,
+        requesterName: r.requester.name,
+        ministryType: r.ministryType,
+        totalAmount: formatAmount(r.totalAmount),
+        overrideRequested: !!r.regionalOverride,
+        myOverrideApprovalId: myRow?.id ?? null,
+        myVote: myRow?.decidedAt ? myRow.approved : null,
+      };
+    });
 }

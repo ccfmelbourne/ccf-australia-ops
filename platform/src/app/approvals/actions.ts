@@ -1,7 +1,7 @@
 "use server";
 
 import { getCurrentUserId } from "@/lib/user-session";
-import { decideApproval, requestChanges } from "@/lib/approval-data";
+import { decideApproval, requestChanges, overrideApprove } from "@/lib/approval-data";
 
 const DATA_URL_PREFIX = /^data:image\/png;base64,/;
 
@@ -48,6 +48,24 @@ export async function requestChangesAction(
   }
   try {
     await requestChanges(approvalId, userId, comments.trim());
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Something went wrong." };
+  }
+}
+
+// One of the three tier-4 override committee members casting their vote --
+// see approval-data.ts's overrideApprove.
+export async function overrideApproveAction(
+  overrideApprovalId: string,
+  approved: boolean,
+): Promise<{ ok: boolean; error?: string }> {
+  const userId = await getCurrentUserId();
+  if (!userId) {
+    return { ok: false, error: "Not signed in." };
+  }
+  try {
+    await overrideApprove(overrideApprovalId, userId, approved);
     return { ok: true };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : "Something went wrong." };

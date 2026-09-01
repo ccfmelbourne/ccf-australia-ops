@@ -2,11 +2,6 @@
 // learn more about it in the docs: https://pris.ly/d/prisma-schema
 //
 // Subset of specs/0002-reimbursement-data-model-api.md (repo root).
-// Intentionally NOT modeled yet (out of scope so far; add when a later
-// slice actually needs it, per the charter's "update the spec/schema when
-// implementation reveals a gap" rule):
-//   - RegionalDirectorOverride / OverrideApproval (approval creation isn't
-//     part of this slice — no submit/approval-routing action exists yet)
 //
 // BankDetails encryption-at-rest: relies on Neon's standard disk-level
 // encryption + strict access control (owner-only reads) for now.
@@ -92,6 +87,7 @@ model User {
 
   requestsMade        ReimbursementRequest[] @relation("Requester")
   approvals           RequiredApproval[]
+  overrideApprovals   OverrideApproval[]
   auditEntries        AuditLogEntry[]
   approverAssignments ApproverAssignment[]
 }
@@ -113,6 +109,7 @@ model ReimbursementRequest {
   receipts          Receipt[]
   bankDetails       BankDetails?
   requiredApprovals RequiredApproval[]
+  regionalOverride  RegionalDirectorOverride?
   auditLog          AuditLogEntry[]
 }
 
@@ -163,6 +160,38 @@ model RequiredApproval {
   signatureStorageKey    String?
 
   @@unique([reimbursementRequestId, role])
+}
+
+// Tier-4 (>$5,000) alternative to the REGIONAL_DIRECTOR RequiredApproval
+// row -- confirmed with leadership (specs/0001, "Regional Director approval
+// & COS override"): only created if the requester or one of the three
+// named committee members (hardcoded in approval-routing.ts, not resolved
+// via ApproverAssignment -- this is a fixed committee, not "any 3 COS")
+// chooses to pursue it instead of waiting on the Regional Director.
+// withinBudget flips true only once all 3 OverrideApproval rows are
+// approved -- their unanimous approval *is* the within-budget attestation,
+// no separate budget-plan lookup (per spec 0001).
+model RegionalDirectorOverride {
+  id                     String               @id @default(cuid())
+  reimbursementRequestId String               @unique
+  request                ReimbursementRequest @relation(fields: [reimbursementRequestId], references: [id], onDelete: Cascade)
+  withinBudget           Boolean              @default(false)
+  createdAt              DateTime             @default(now())
+
+  approvals              OverrideApproval[]
+}
+
+// Exactly three rows per override, one each for the fixed committee.
+model OverrideApproval {
+  id             String                   @id @default(cuid())
+  overrideId     String
+  override       RegionalDirectorOverride @relation(fields: [overrideId], references: [id], onDelete: Cascade)
+  approverUserId String
+  approver       User                     @relation(fields: [approverUserId], references: [id])
+  approved       Boolean                  @default(false)
+  decidedAt      DateTime?
+
+  @@unique([overrideId, approverUserId])
 }
 
 // Static reference data: which User fills a given approver role, either

@@ -25,6 +25,7 @@ import {
   downloadReceiptBytes,
 } from "@/lib/receipt-storage";
 import { deleteSignature } from "@/lib/signature-storage";
+import { requestOverride } from "@/lib/approval-data";
 import { receiptExtractionService, type ReceiptExtractionResult } from "@/lib/receipt-extraction";
 
 const requestDetailsSchema = z.object({
@@ -32,12 +33,17 @@ const requestDetailsSchema = z.object({
   ministryType: z.enum(MINISTRY_TYPES),
 });
 
-// Returns the new id instead of redirecting: the drawer opens for the new
-// draft in place on the same /requests page, it never navigates away.
+// Returns the new id AND voucherNo (not just id) so the caller can build
+// the drawer's edit-mode view entirely client-side, instead of navigating
+// via router.push and waiting on a server round-trip through
+// getDraftRequest just to get back data the caller already has (a fresh
+// draft has no line items/receipts/bank details yet) -- that round-trip
+// was creating a visible gap where neither the "creating" nor "editing"
+// drawer content was mounted, which unmounted and remounted the dialog.
 export async function createDraftRequestForDrawerAction(
   requestType: string,
   ministryType: string,
-): Promise<{ ok: boolean; id?: string; error?: string }> {
+): Promise<{ ok: boolean; id?: string; voucherNo?: string; error?: string }> {
   const userId = await getCurrentUserId();
   if (!userId) {
     return { ok: false, error: "Not signed in." };
@@ -48,12 +54,12 @@ export async function createDraftRequestForDrawerAction(
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input" };
   }
 
-  const { id } = await createDraftRequest(
+  const { id, voucherNo } = await createDraftRequest(
     userId,
     parsed.data.requestType,
     parsed.data.ministryType,
   );
-  return { ok: true, id };
+  return { ok: true, id, voucherNo };
 }
 
 export async function updateRequestDetailsAction(
@@ -112,6 +118,25 @@ export async function submitRequestAction(
   }
   try {
     await submitRequest(requestId, userId);
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Something went wrong." };
+  }
+}
+
+// Callable from either the requester's own progress view (/requests) or a
+// committee member's override-opportunities list (/approvals) -- both call
+// this same action, requestOverride (approval-data.ts) does the actual
+// authorization check regardless of which page it was triggered from.
+export async function requestOverrideAction(
+  requestId: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const userId = await getCurrentUserId();
+  if (!userId) {
+    return { ok: false, error: "Not signed in." };
+  }
+  try {
+    await requestOverride(requestId, userId);
     return { ok: true };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : "Something went wrong." };

@@ -4,6 +4,7 @@ import { getApprovedRequestDetail, receiptFilename } from "@/lib/request-data";
 import { sendApprovedRequestEmail } from "@/lib/notifications";
 import { getReceiptDownloadUrl } from "@/lib/receipt-storage";
 import { assertValidSignatureImage, buildSignatureStorageKey, uploadSignature } from "@/lib/signature-storage";
+import { getTier, REGIONAL_DIRECTOR_OVERRIDE_COMMITTEE_EMAILS } from "@/lib/approval-routing";
 import type { RequestTypeValue, MinistryTypeValue } from "@/lib/request-types";
 
 export interface PendingApprovalLineItemView {
@@ -78,6 +79,53 @@ export async function getPendingApprovalsForUser(userId: string): Promise<Pendin
   );
 }
 
+// A tier-4 request's REGIONAL_DIRECTOR row can be satisfied two ways
+// (specs/0001's confirmed Regional Director / COS-committee override
+// rule) -- every other role still needs a flat APPROVED, but
+// REGIONAL_DIRECTOR itself counts as satisfied if either it's directly
+// APPROVED, or a RegionalDirectorOverride exists with all 3 committee
+// members unanimous (withinBudget). Kept as the one place this decision is
+// made, per spec 0002's "Approval branching" note, rather than duplicating
+// this logic at each call site.
+function isFullyApproved(
+  requiredApprovals: { role: string; status: string }[],
+  override: { withinBudget: boolean } | null,
+): boolean {
+  const nonRegional = requiredApprovals.filter((a) => a.role !== "REGIONAL_DIRECTOR");
+  if (!nonRegional.every((a) => a.status === "APPROVED")) return false;
+  const regional = requiredApprovals.find((a) => a.role === "REGIONAL_DIRECTOR");
+  if (!regional) return true; // tier < 4, no such row exists at all
+  return regional.status === "APPROVED" || override?.withinBudget === true;
+}
+
+// Two places can newly complete a request's approval: a regular
+// decideApproval("APPROVED") call, and overrideApprove's third/final
+// committee vote. Both call this instead of duplicating the
+// finalize-and-notify logic.
+async function finalizeIfFullyApproved(requestId: string): Promise<void> {
+  const [requiredApprovals, override] = await Promise.all([
+    prisma.requiredApproval.findMany({ where: { reimbursementRequestId: requestId } }),
+    prisma.regionalDirectorOverride.findUnique({ where: { reimbursementRequestId: requestId } }),
+  ]);
+  if (!isFullyApproved(requiredApprovals, override)) return;
+
+  await prisma.reimbursementRequest.update({
+    where: { id: requestId },
+    data: { status: "APPROVED" },
+  });
+  // Per ADR 0001, a notification failure must never undo or block the
+  // approval decision it's reporting on -- caught and logged, not
+  // rethrown.
+  try {
+    const detail = await getApprovedRequestDetail(requestId);
+    if (detail) {
+      await sendApprovedRequestEmail(detail);
+    }
+  } catch (err) {
+    console.error("Failed to send approved-request notification:", err);
+  }
+}
+
 // A single rejection ends the whole chain (matches spec 0002's
 // rejectReturn action). An approval only moves the request to APPROVED
 // once every RequiredApproval row for it is APPROVED. Not wrapped in an
@@ -125,26 +173,7 @@ export async function decideApproval(
       data: { status: "REJECTED_RETURNED" },
     });
   } else {
-    const remaining = await prisma.requiredApproval.count({
-      where: { reimbursementRequestId: approval.reimbursementRequestId, status: { not: "APPROVED" } },
-    });
-    if (remaining === 0) {
-      await prisma.reimbursementRequest.update({
-        where: { id: approval.reimbursementRequestId },
-        data: { status: "APPROVED" },
-      });
-      // Per ADR 0001, a notification failure must never undo or block the
-      // approval decision it's reporting on -- caught and logged, not
-      // rethrown.
-      try {
-        const detail = await getApprovedRequestDetail(approval.reimbursementRequestId);
-        if (detail) {
-          await sendApprovedRequestEmail(detail);
-        }
-      } catch (err) {
-        console.error("Failed to send approved-request notification:", err);
-      }
-    }
+    await finalizeIfFullyApproved(approval.reimbursementRequestId);
   }
 
   await prisma.auditLogEntry.create({
@@ -199,4 +228,107 @@ export async function requestChanges(approvalId: string, userId: string, comment
       details: { role: approval.role, comments },
     },
   });
+}
+
+// Starts the tier-4 committee-override path (specs/0001) as an alternative
+// to waiting on the Regional Director -- callable by the requester or any
+// of the three fixed committee members (REGIONAL_DIRECTOR_OVERRIDE_
+// COMMITTEE_EMAILS, approval-routing.ts), per the decision-maker's call to
+// widen this beyond just the requester. Doesn't touch the REGIONAL_DIRECTOR
+// RequiredApproval row -- it stays PENDING and can still be decided
+// directly; the two paths are alternatives, not a cancellation of one by
+// the other.
+export async function requestOverride(requestId: string, userId: string): Promise<void> {
+  const request = await prisma.reimbursementRequest.findUnique({
+    where: { id: requestId },
+    include: { regionalOverride: true },
+  });
+  if (!request || request.status !== "IN_APPROVAL") {
+    throw new Error("Request not found.");
+  }
+  if (getTier(Number(request.totalAmount)) !== 4) {
+    throw new Error("The committee override only applies to tier-4 (over $5,000) requests.");
+  }
+  if (request.regionalOverride) {
+    throw new Error("A committee override has already been requested for this request.");
+  }
+  const regionalRow = await prisma.requiredApproval.findUnique({
+    where: { reimbursementRequestId_role: { reimbursementRequestId: requestId, role: "REGIONAL_DIRECTOR" } },
+  });
+  if (!regionalRow || regionalRow.status !== "PENDING") {
+    throw new Error("Regional Director approval is no longer pending.");
+  }
+
+  const committeeUsers = await prisma.user.findMany({
+    where: { email: { in: [...REGIONAL_DIRECTOR_OVERRIDE_COMMITTEE_EMAILS] } },
+  });
+  if (committeeUsers.length !== REGIONAL_DIRECTOR_OVERRIDE_COMMITTEE_EMAILS.length) {
+    throw new Error("The override committee is not fully set up.");
+  }
+  if (userId !== request.requesterId && !committeeUsers.some((u) => u.id === userId)) {
+    throw new Error("Only the requester or a committee member can request this override.");
+  }
+
+  await prisma.regionalDirectorOverride.create({
+    data: {
+      reimbursementRequestId: requestId,
+      approvals: { create: committeeUsers.map((u) => ({ approverUserId: u.id })) },
+    },
+  });
+
+  await prisma.auditLogEntry.create({
+    data: {
+      reimbursementRequestId: requestId,
+      actorUserId: userId,
+      action: "OVERRIDE_REQUESTED",
+    },
+  });
+}
+
+// One of the three committee members casts their vote. Unanimous approval
+// *is* the within-budget attestation (per spec 0001, no separate
+// budget-plan lookup) -- the third "yes" both flips withinBudget and
+// (via finalizeIfFullyApproved) can complete the whole request if every
+// other role is already APPROVED too. A "no" just records a no; V1
+// deliberately doesn't add any retry/escalation flow beyond what the
+// requester/committee can already see in the request's progress view.
+export async function overrideApprove(
+  overrideApprovalId: string,
+  userId: string,
+  approved: boolean,
+): Promise<void> {
+  const overrideApproval = await prisma.overrideApproval.findUnique({
+    where: { id: overrideApprovalId },
+    include: { override: true },
+  });
+  if (!overrideApproval || overrideApproval.approverUserId !== userId || overrideApproval.decidedAt !== null) {
+    throw new Error("Override approval not found.");
+  }
+
+  await prisma.overrideApproval.update({
+    where: { id: overrideApprovalId },
+    data: { approved, decidedAt: new Date() },
+  });
+
+  await prisma.auditLogEntry.create({
+    data: {
+      reimbursementRequestId: overrideApproval.override.reimbursementRequestId,
+      actorUserId: userId,
+      action: "OVERRIDE_APPROVAL_DECIDED",
+      details: { approved },
+    },
+  });
+
+  if (!approved) return;
+
+  const allApprovals = await prisma.overrideApproval.findMany({
+    where: { overrideId: overrideApproval.overrideId },
+  });
+  if (!allApprovals.every((a) => a.approved)) return;
+
+  await prisma.regionalDirectorOverride.update({
+    where: { id: overrideApproval.overrideId },
+    data: { withinBudget: true },
+  });
+  await finalizeIfFullyApproved(overrideApproval.override.reimbursementRequestId);
 }

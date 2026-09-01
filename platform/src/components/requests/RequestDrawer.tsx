@@ -25,7 +25,7 @@ import type { DraftRequestView } from "@/lib/request-data";
 // width, no separate breakpoint needed). <dialog> gives focus-trapping,
 // Escape-to-close, and a backdrop natively, so no new UI dependency.
 type RequestDrawerProps =
-  | { mode: "create"; onCreated: (id: string) => void; onClose: () => void }
+  | { mode: "create"; onCreated: (data: DraftRequestView) => void; onClose: () => void }
   | { mode: "edit"; data: DraftRequestView; onClose: () => void };
 
 export function RequestDrawer(props: RequestDrawerProps) {
@@ -87,7 +87,16 @@ export function RequestDrawer(props: RequestDrawerProps) {
 // changing type/ministry is a single field's own update call with no such
 // race. A ref (not just state) guards against React re-invoking the effect
 // (e.g. Strict Mode's dev-only double-invoke) from firing a second create.
-function CreateStep({ onCreated }: { onCreated: (id: string) => void }) {
+//
+// onCreated receives the full initial DraftRequestView, built right here
+// from the action's result, rather than just an id -- the caller used to
+// navigate to ?open=<id> and wait for a server round-trip through
+// getDraftRequest to fetch back data it could already predict (a fresh
+// draft has no line items/receipts/bank details/return reason yet). That
+// round-trip created a render where neither this "creating" step nor the
+// eventual edit view was mounted, which visibly closed and reopened the
+// dialog -- found via live testing.
+function CreateStep({ onCreated }: { onCreated: (data: DraftRequestView) => void }) {
   const startedRef = useRef(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -96,8 +105,18 @@ function CreateStep({ onCreated }: { onCreated: (id: string) => void }) {
     startedRef.current = true;
     (async () => {
       const result = await createDraftRequestForDrawerAction(REQUEST_TYPES[0], MINISTRY_TYPES[0]);
-      if (result.ok && result.id) {
-        onCreated(result.id);
+      if (result.ok && result.id && result.voucherNo) {
+        onCreated({
+          id: result.id,
+          voucherNo: result.voucherNo,
+          requestType: REQUEST_TYPES[0],
+          ministryType: MINISTRY_TYPES[0],
+          totalAmount: "0.00",
+          lineItems: [],
+          receipts: [],
+          bankDetails: null,
+          returnReason: null,
+        });
       } else {
         setError(result.error ?? "Something went wrong.");
       }
