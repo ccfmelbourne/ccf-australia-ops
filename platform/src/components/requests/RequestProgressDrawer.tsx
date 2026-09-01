@@ -4,7 +4,109 @@ import { useEffect, useRef } from "react";
 import { REQUEST_TYPE_LABELS, MINISTRY_TYPE_LABELS } from "@/lib/request-types";
 import { getApproverRoleLabel } from "@/lib/approval-routing";
 import { RequestStatusBadge } from "@/components/RequestStatusBadge";
-import type { RequestProgressView } from "@/lib/request-data";
+import type { RequestProgressView, RequestProgressApprovalView } from "@/lib/request-data";
+
+function formatDate(iso: string | null): string {
+  if (!iso) return "";
+  return new Date(iso).toLocaleDateString("en-AU", { day: "numeric", month: "short", year: "numeric" });
+}
+
+type TimelineState = "approved" | "waived" | "rejected" | "pending";
+
+const TIMELINE_ICON: Record<TimelineState, string> = {
+  approved: "✓",
+  waived: "✓",
+  rejected: "×",
+  pending: "◷",
+};
+
+const TIMELINE_ICON_CLASSES: Record<TimelineState, string> = {
+  approved: "bg-teal-600 text-white",
+  waived: "bg-teal-100 text-teal-700",
+  rejected: "bg-red-600 text-white",
+  pending: "bg-slate-200 text-slate-500",
+};
+
+// A vertical timeline instead of a plain "role / status" table -- each
+// role gets an icon (checked/waived/rejected/awaiting), a connecting line
+// to the next step, and the actual decision detail (who, when) instead of
+// just a status word. This is the requester's main view of "where is my
+// request," so it's worth more visual weight than a two-column list.
+function ApprovalTimeline({
+  approvals,
+  ministryType,
+  regionalDirectorOverrideConfirmedAt,
+}: {
+  approvals: RequestProgressApprovalView[];
+  ministryType: RequestProgressView["ministryType"];
+  regionalDirectorOverrideConfirmedAt: string | null;
+}) {
+  return (
+    <div>
+      <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
+        Approval progress
+      </p>
+      <ol className="flex flex-col">
+        {approvals.map((a, i) => {
+          const isLast = i === approvals.length - 1;
+          // A tier-4 request can reach APPROVED via Ross Callado's "within
+          // budget" confirmation instead of a direct Regional Director
+          // decision -- his row stays genuinely PENDING forever in that
+          // case (correct data, not a bug; voucher-pdf.tsx represents this
+          // the same way on the final voucher).
+          const waived =
+            a.role === "REGIONAL_DIRECTOR" &&
+            a.status !== "APPROVED" &&
+            regionalDirectorOverrideConfirmedAt !== null;
+          const state: TimelineState = waived
+            ? "waived"
+            : a.status === "APPROVED"
+              ? "approved"
+              : a.status === "REJECTED"
+                ? "rejected"
+                : "pending";
+
+          return (
+            <li key={i} className="flex gap-3">
+              <div className="flex flex-col items-center">
+                <span
+                  aria-hidden
+                  className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold ${TIMELINE_ICON_CLASSES[state]}`}
+                >
+                  {TIMELINE_ICON[state]}
+                </span>
+                {!isLast && <span className="w-px flex-1 bg-slate-200" />}
+              </div>
+              <div className={isLast ? "pb-1" : "pb-6"}>
+                <p className="text-sm font-semibold text-slate-900">
+                  {getApproverRoleLabel(a.role, ministryType)}
+                </p>
+                {state === "approved" && (
+                  <p className="text-xs text-slate-500">
+                    Approved {formatDate(a.decidedAt)}
+                    {a.approverName && (
+                      <>
+                        <br />
+                        {a.approverName}
+                      </>
+                    )}
+                  </p>
+                )}
+                {state === "rejected" && (
+                  <p className="text-xs text-red-600">Rejected {formatDate(a.decidedAt)}</p>
+                )}
+                {state === "waived" && (
+                  <p className="text-xs text-teal-600">Waived — satisfied via committee confirmation</p>
+                )}
+                {state === "pending" && <p className="text-xs text-slate-500">Awaiting approval</p>}
+              </div>
+            </li>
+          );
+        })}
+      </ol>
+    </div>
+  );
+}
 
 // The requester's own read-only view of a submitted (non-editable)
 // request -- there was previously no UI at all for this; RequestsTable
@@ -54,6 +156,22 @@ export function RequestProgressDrawer({
       </div>
 
       <div className="flex flex-col gap-6 pt-4">
+        {data.status === "APPROVED" && (
+          <div className="flex flex-col items-center gap-1 rounded-lg border border-teal-200 bg-teal-50 p-6 text-center">
+            <span
+              aria-hidden
+              className="mb-2 flex h-10 w-10 items-center justify-center rounded-full bg-teal-600 text-lg font-bold text-white"
+            >
+              ✓
+            </span>
+            <p className="text-base font-bold text-slate-900">Reimbursement approved</p>
+            <p className="max-w-xs text-sm text-slate-600">
+              All required approvals are complete. Finance will now process your request.
+            </p>
+            <p className="mt-1 font-mono text-xs text-slate-500">Voucher #{data.voucherNo}</p>
+          </div>
+        )}
+
         <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-2 text-sm">
           <dt className="text-slate-500">Status</dt>
           <dd>
@@ -129,25 +247,11 @@ export function RequestProgressDrawer({
           </div>
         )}
 
-        <div>
-          <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
-            Approval progress
-          </p>
-          <ul className="text-sm">
-            {data.approvals.map((a, i) => (
-              <li key={i} className="flex justify-between border-b border-slate-100 py-1">
-                <span>{getApproverRoleLabel(a.role, data.ministryType)}</span>
-                <span className="text-slate-600">
-                  {a.status === "APPROVED"
-                    ? `Approved${a.approverName ? ` — ${a.approverName}` : ""}`
-                    : a.status === "REJECTED"
-                      ? "Rejected"
-                      : "Pending"}
-                </span>
-              </li>
-            ))}
-          </ul>
-        </div>
+        <ApprovalTimeline
+          approvals={data.approvals}
+          ministryType={data.ministryType}
+          regionalDirectorOverrideConfirmedAt={data.regionalDirectorOverrideConfirmedAt}
+        />
       </div>
     </dialog>
   );
