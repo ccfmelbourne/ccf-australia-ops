@@ -25,7 +25,6 @@ import {
   downloadReceiptBytes,
 } from "@/lib/receipt-storage";
 import { deleteSignature } from "@/lib/signature-storage";
-import { requestOverride } from "@/lib/approval-data";
 import { receiptExtractionService, type ReceiptExtractionResult } from "@/lib/receipt-extraction";
 
 const requestDetailsSchema = z.object({
@@ -118,25 +117,6 @@ export async function submitRequestAction(
   }
   try {
     await submitRequest(requestId, userId);
-    return { ok: true };
-  } catch (err) {
-    return { ok: false, error: err instanceof Error ? err.message : "Something went wrong." };
-  }
-}
-
-// Callable from either the requester's own progress view (/requests) or a
-// committee member's override-opportunities list (/approvals) -- both call
-// this same action, requestOverride (approval-data.ts) does the actual
-// authorization check regardless of which page it was triggered from.
-export async function requestOverrideAction(
-  requestId: string,
-): Promise<{ ok: boolean; error?: string }> {
-  const userId = await getCurrentUserId();
-  if (!userId) {
-    return { ok: false, error: "Not signed in." };
-  }
-  try {
-    await requestOverride(requestId, userId);
     return { ok: true };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : "Something went wrong." };
