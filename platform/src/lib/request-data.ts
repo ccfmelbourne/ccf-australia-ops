@@ -71,6 +71,7 @@ export interface ReturnReasonView {
 export interface DraftRequestView {
   id: string;
   voucherNo: string;
+  requesterName: string;
   requestType: RequestTypeValue;
   ministryType: MinistryTypeValue;
   totalAmount: string; // formatted
@@ -174,11 +175,13 @@ export async function createDraftRequest(
   requesterId: string,
   requestType: RequestTypeValue,
   ministryType: MinistryTypeValue,
-): Promise<{ id: string; voucherNo: string }> {
+): Promise<{ id: string; voucherNo: string; requesterName: string }> {
   const voucherNo = await nextVoucherNo();
   // Array-form transaction -- each op is independent, no op needs to read
-  // another's result first.
-  const [request] = await prisma.$transaction([
+  // another's result first. The requester lookup rides along here (rather
+  // than a separate query in the caller) purely so the wizard's Review step
+  // can show "Requester: <name>" without its own round-trip.
+  const [request, requester] = await prisma.$transaction([
     prisma.reimbursementRequest.create({
       data: {
         voucherNo,
@@ -189,6 +192,7 @@ export async function createDraftRequest(
         status: "DRAFT",
       },
     }),
+    prisma.user.findUniqueOrThrow({ where: { id: requesterId } }),
   ]);
   await prisma.auditLogEntry.create({
     data: {
@@ -198,7 +202,7 @@ export async function createDraftRequest(
       details: { requestType, ministryType },
     },
   });
-  return { id: request.id, voucherNo: request.voucherNo };
+  return { id: request.id, voucherNo: request.voucherNo, requesterName: requester.name };
 }
 
 // A request is editable by its own requester in exactly three statuses:
@@ -233,7 +237,7 @@ export async function getDraftRequest(
 ): Promise<DraftRequestView | null> {
   const r = await prisma.reimbursementRequest.findFirst({
     where: { id, requesterId, status: { in: [...EDITABLE_STATUSES] } },
-    include: { lineItems: true, receipts: true, bankDetails: true },
+    include: { lineItems: true, receipts: true, bankDetails: true, requester: true },
   });
   if (!r) return null;
   const receipts = await Promise.all(
@@ -274,6 +278,7 @@ export async function getDraftRequest(
   return {
     id: r.id,
     voucherNo: r.voucherNo,
+    requesterName: r.requester.name,
     requestType: r.requestType,
     ministryType: r.ministryType,
     totalAmount: formatAmount(r.totalAmount),
