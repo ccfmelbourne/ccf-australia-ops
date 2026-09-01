@@ -36,6 +36,15 @@ export function RequestsTable({
   // visible as the panel closing and reopening. Superseded automatically
   // once the real openRequest arrives from the server (see below).
   const [justCreated, setJustCreated] = useState<DraftRequestView | null>(null);
+  // The step-by-step wizard is only for the live moment right after
+  // clicking "Create Request" -- true from handleCreated onward (through
+  // the justCreated -> openRequest handoff above, which doesn't touch
+  // this), reset to false the instant the user does anything else
+  // (clicks Edit on a row, or closes the drawer). Clicking "Edit" always
+  // shows the flat layout, even for a draft that was never submitted --
+  // confirmed with the decision-maker after the wizard's first version
+  // wrongly kept showing it on every reopen of an unsubmitted draft.
+  const [openedViaCreate, setOpenedViaCreate] = useState(false);
   // Deleting a request is permanent (line items/receipts/bank
   // details/approval history all go with it) -- clicking Delete arms this
   // row rather than firing immediately, so a second click is required.
@@ -46,24 +55,28 @@ export function RequestsTable({
   function openEdit(id: string) {
     setCreating(false);
     setJustCreated(null);
+    setOpenedViaCreate(false);
     router.push(`/requests?open=${id}`);
   }
 
   function openProgress(id: string) {
     setCreating(false);
     setJustCreated(null);
+    setOpenedViaCreate(false);
     router.push(`/requests?progress=${id}`);
   }
 
   function handleCreated(data: DraftRequestView) {
     setCreating(false);
     setJustCreated(data);
+    setOpenedViaCreate(true);
     router.push(`/requests?open=${data.id}`);
   }
 
   function closeDrawer() {
     setCreating(false);
     setJustCreated(null);
+    setOpenedViaCreate(false);
     router.push("/requests");
   }
 
@@ -184,7 +197,14 @@ export function RequestsTable({
       )}
 
       {creating && <RequestDrawer mode="create" onCreated={handleCreated} onClose={closeDrawer} />}
-      {effectiveOpenRequest && <RequestDrawer mode="edit" data={effectiveOpenRequest} onClose={closeDrawer} />}
+      {effectiveOpenRequest && (
+        <RequestDrawer
+          mode="edit"
+          data={effectiveOpenRequest}
+          showWizard={openedViaCreate}
+          onClose={closeDrawer}
+        />
+      )}
       {progressRequest && <RequestProgressDrawer data={progressRequest} onClose={closeDrawer} />}
     </div>
   );

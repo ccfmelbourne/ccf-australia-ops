@@ -3,6 +3,12 @@ import { formatAmount } from "@/lib/money";
 import { getReceiptDownloadUrl } from "@/lib/receipt-storage";
 import { normalizeBsb, formatBsb, assertValidAccountNumber } from "@/lib/bank-details";
 import {
+  assertValidSignatureImage,
+  buildSignatureStorageKey,
+  uploadSignature,
+  deleteSignature,
+} from "@/lib/signature-storage";
+import {
   getTier,
   getRequiredApproverRoles,
   APPROVER_ROLES,
@@ -120,6 +126,11 @@ export interface ApprovedRequestDetail {
   // confirmation instead of a direct Regional Director decision --
   // approval-data.ts's confirmRegionalDirectorOverride/isFullyApproved.
   regionalDirectorOverrideConfirmedAt: string | null; // ISO date
+  // R2 object key for the requester's own signature, captured at submit
+  // time (submitRequest below). Always set for a request that reached
+  // APPROVED -- submitRequest requires it -- but typed nullable since this
+  // field predates the requirement and old rows could in principle lack it.
+  requesterSignatureStorageKey: string | null;
 }
 
 export interface RequestListItemView {
@@ -375,7 +386,11 @@ async function resolveApprover(
 // this falls back to a full reset instead. A first-time submission from
 // DRAFT has no existing rows at all, so it trivially takes the full-reset
 // path -- no special-casing needed for "is this the first time."
-export async function submitRequest(requestId: string, requesterId: string): Promise<void> {
+export async function submitRequest(
+  requestId: string,
+  requesterId: string,
+  signatureBuffer: Buffer,
+): Promise<void> {
   const request = await prisma.reimbursementRequest.findFirst({
     where: { id: requestId, requesterId, status: { in: [...EDITABLE_STATUSES] } },
     include: { lineItems: true, bankDetails: true, receipts: true, requiredApprovals: true },
@@ -389,9 +404,20 @@ export async function submitRequest(requestId: string, requesterId: string): Pro
   if (!request.bankDetails) {
     throw new Error("Add bank details before submitting.");
   }
-  if (request.receipts.length === 0) {
+  // Cash advances are requested before the money's spent -- there's
+  // nothing to attach a receipt for yet, unlike every other request type.
+  if (request.requestType !== "CASH_ADVANCE" && request.receipts.length === 0) {
     throw new Error("Attach at least one receipt before submitting.");
   }
+  assertValidSignatureImage(signatureBuffer);
+
+  // Uploaded before the transaction below -- if this throws, nothing else
+  // about the request changes. The previous key (a resubmission replacing
+  // an earlier signature) is only deleted after the transaction commits,
+  // so a mid-transaction failure never orphans-deletes a still-valid one.
+  const signatureStorageKey = buildSignatureStorageKey(requestId);
+  await uploadSignature(signatureStorageKey, signatureBuffer);
+  const previousSignatureStorageKey = request.requesterSignatureStorageKey;
 
   const isResubmission = request.status === "NEEDS_CLARIFICATION" || request.status === "REJECTED_RETURNED";
   const tier = getTier(Number(request.totalAmount));
@@ -419,7 +445,7 @@ export async function submitRequest(requestId: string, requesterId: string): Pro
 
   const requestUpdate = prisma.reimbursementRequest.update({
     where: { id: requestId },
-    data: { status: "IN_APPROVAL", submittedAt: new Date() },
+    data: { status: "IN_APPROVAL", submittedAt: new Date(), requesterSignatureStorageKey: signatureStorageKey },
   });
 
   if (canPreserve) {
@@ -462,7 +488,12 @@ export async function submitRequest(requestId: string, requesterId: string): Pro
       // resetting RequiredApproval rows above.
       prisma.reimbursementRequest.update({
         where: { id: requestId },
-        data: { status: "IN_APPROVAL", submittedAt: new Date(), regionalDirectorOverrideConfirmedAt: null },
+        data: {
+          status: "IN_APPROVAL",
+          submittedAt: new Date(),
+          regionalDirectorOverrideConfirmedAt: null,
+          requesterSignatureStorageKey: signatureStorageKey,
+        },
       }),
     ]);
   }
@@ -475,6 +506,10 @@ export async function submitRequest(requestId: string, requesterId: string): Pro
       details: { tier, requiredRoles: roles, preservedPriorApprovals: canPreserve },
     },
   });
+
+  if (previousSignatureStorageKey) {
+    await deleteSignature(previousSignatureStorageKey);
+  }
 }
 
 // Everything the approved-request voucher PDF/notification needs, fetched
@@ -541,6 +576,7 @@ export async function getApprovedRequestDetail(
     regionalDirectorOverrideConfirmedAt: r.regionalDirectorOverrideConfirmedAt
       ? r.regionalDirectorOverrideConfirmedAt.toISOString()
       : null,
+    requesterSignatureStorageKey: r.requesterSignatureStorageKey,
   };
 }
 

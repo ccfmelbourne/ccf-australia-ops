@@ -108,15 +108,19 @@ export async function deleteRequestAction(
   }
 }
 
+const SIGNATURE_DATA_URL_PREFIX = /^data:image\/png;base64,/;
+
 export async function submitRequestAction(
   requestId: string,
+  signatureDataUrl: string,
 ): Promise<{ ok: boolean; error?: string }> {
   const userId = await getCurrentUserId();
   if (!userId) {
     return { ok: false, error: "Not signed in." };
   }
+  const signatureBuffer = Buffer.from(signatureDataUrl.replace(SIGNATURE_DATA_URL_PREFIX, ""), "base64");
   try {
-    await submitRequest(requestId, userId);
+    await submitRequest(requestId, userId, signatureBuffer);
     return { ok: true };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : "Something went wrong." };
@@ -178,7 +182,7 @@ export async function removeLineItemAction(
 export async function uploadReceiptAction(
   requestId: string,
   formData: FormData,
-): Promise<{ ok: boolean; error?: string }> {
+): Promise<{ ok: boolean; id?: string; error?: string }> {
   const userId = await getCurrentUserId();
   if (!userId) {
     return { ok: false, error: "Not signed in." };
@@ -200,8 +204,10 @@ export async function uploadReceiptAction(
 
     const storageKey = buildReceiptStorageKey(requestId, file.name);
     await uploadReceipt(storageKey, buffer, file.type);
-    await addReceiptRecord(requestId, userId, storageKey);
-    return { ok: true };
+    // Returned so the client can immediately scan the new receipt for
+    // suggested line-item information without a separate lookup.
+    const { id } = await addReceiptRecord(requestId, userId, storageKey);
+    return { ok: true, id };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : "Something went wrong." };
   }
