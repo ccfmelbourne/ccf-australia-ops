@@ -3,11 +3,15 @@
 // adding one new file implementing this interface and changing the export
 // in index.ts -- nothing else in the app changes.
 //
-// Every ReceiptExtractionResult field is a *suggestion*: extract() never
-// writes to the database. The caller always routes a confirmed value
-// through the normal add-line-item flow, same as a manually typed row --
-// no OCR result may alter or approve financial data without explicit
-// human confirmation.
+// extract() itself never writes anything -- it only reads a receipt and
+// returns what it found. What the caller does with the result is a
+// separate decision: as of 2026-09-02, uploadAndScanReceiptAction
+// (app/requests/actions.ts) writes a real LineItem automatically whenever
+// a result has both a merchant and a valid amount, with no human
+// confirmation step -- a deliberate, explicitly confirmed reversal of this
+// module's original "OCR never writes without confirmation" rule. A
+// result missing either field is never partially acted on; the requester
+// adds that line item manually instead.
 
 export interface ReceiptInput {
   buffer: Buffer;
