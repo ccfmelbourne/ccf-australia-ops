@@ -21,18 +21,26 @@ const prisma = new PrismaClient({ adapter });
 // named approver per ministry type (no COS2 anywhere -- a pre-existing gap
 // in the pilot's own reference data, not something new), plus two org-wide
 // roles (Finance Overseer, Regional Director).
+//
+// Corrected 2026-09-01: the original assumption that every Ministry
+// Overseer also automatically holds COS1 for their ministry was wrong
+// (confirmed via a real approver, Dexter Santiago, reporting he only holds
+// COMMS_MEDIA's Ministry Overseer role, not COS1). See
+// MINISTRIES_WITH_SAME_PERSON_AS_COS1 below for which ministries actually
+// have the same person holding both roles. B1G's overseer also moved back
+// to Vamie Pinlac (Robert Cruz removed).
 const NAMED_USERS = {
   ross: { name: "Ross Callado", email: "rosscallado@gmail.com" },
   joel: { name: "Joel Jerez", email: "joel.jmj@gmail.com" },
-  robert: { name: "Robert Cruz", email: "nidezcruz@gmail.com" },
   joshua: { name: "Joshua Magalong", email: "joshua.magalong@gmail.com" },
   lawrence: { name: "Lawrence Hernando", email: "slamboyh72@gmail.com" },
+  eland: { name: "Eland Afuang", email: "eland.afuang@gmail.com" },
   dexter: { name: "Dexter Santiago", email: "dexsans@gmail.com" },
   moriz: { name: "Moriz Manlangit", email: "moriz.manlangit@gmail.com" },
   ryan: { name: "Ptr. Ryan Escobar", email: "ryanescobar@gmail.com" },
-  // Not a ministry overseer anymore (Robert Cruz replaced her for B1G),
-  // but still one of the 3 fixed named COS for the tier-4 override path --
-  // a separate, later slice. Seeded now so the User row already exists.
+  // Also the Ministry Overseer + COS for B1G (see MINISTRY_OVERSEERS below)
+  // and still one of the 3 fixed named COS for the tier-4 override path --
+  // see approval-routing.ts's REGIONAL_DIRECTOR_OVERRIDE_COMMITTEE_EMAILS.
   vamie: { name: "Vamie Pinlac", email: "vamiebpinlac@gmail.com" },
 } as const;
 
@@ -44,13 +52,28 @@ const MINISTRY_OVERSEERS: Record<MinistryType, NamedUserKey> = {
   FINANCE: "joel",
   NXTGEN: "joel",
   PASTORAL_CARE: "joel",
-  B1G: "robert",
+  B1G: "vamie",
   ELEVATE: "joshua",
-  EVENTS_HOST: "lawrence",
+  EVENTS_RETREAT: "eland",
+  HOST: "lawrence",
   COMMS_MEDIA: "dexter",
   DGM: "moriz",
-  OCEANA_REGIONAL: "ryan",
+  OCEANIA_REGIONAL: "ryan",
 };
+
+// Ministries where the same named person holds both Ministry Overseer and
+// COS1 -- confirmed 2026-09-01 with the decision-maker, ministry by
+// ministry (not assumed automatically like before). Everywhere else, COS1
+// is currently unassigned -- the same kind of gap COS2 already has
+// everywhere, not something new.
+const MINISTRIES_WITH_SAME_PERSON_AS_COS1 = new Set<MinistryType>([
+  "ADMIN",
+  "EXALT_LIVE_PROD",
+  "FINANCE",
+  "NXTGEN",
+  "PASTORAL_CARE",
+  "B1G",
+]);
 
 async function upsertOrgWideAssignment(role: ApproverRole, userId: string) {
   const existing = await prisma.approverAssignment.findFirst({
@@ -76,12 +99,23 @@ async function seedApprovers() {
 
   for (const ministryType of Object.keys(MINISTRY_OVERSEERS) as MinistryType[]) {
     const userKey = MINISTRY_OVERSEERS[ministryType];
-    for (const role of ["MINISTRY_OVERSEER", "COS1"] as const) {
+    await prisma.approverAssignment.upsert({
+      where: { role_ministryType: { role: "MINISTRY_OVERSEER", ministryType } },
+      update: { userId: users[userKey].id },
+      create: { role: "MINISTRY_OVERSEER", ministryType, userId: users[userKey].id },
+    });
+
+    if (MINISTRIES_WITH_SAME_PERSON_AS_COS1.has(ministryType)) {
       await prisma.approverAssignment.upsert({
-        where: { role_ministryType: { role, ministryType } },
+        where: { role_ministryType: { role: "COS1", ministryType } },
         update: { userId: users[userKey].id },
-        create: { role, ministryType, userId: users[userKey].id },
+        create: { role: "COS1", ministryType, userId: users[userKey].id },
       });
+    } else {
+      // COS1 is a gap for this ministry -- remove any stale row left over
+      // from before the 2026-09-01 correction (e.g. Dexter Santiago was
+      // previously wrongly seeded as COMMS_MEDIA's COS1 too).
+      await prisma.approverAssignment.deleteMany({ where: { role: "COS1", ministryType } });
     }
   }
 
@@ -92,7 +126,9 @@ async function seedApprovers() {
   await upsertOrgWideAssignment("FINANCE_OVERSEER", users.joel.id);
   await upsertOrgWideAssignment("REGIONAL_DIRECTOR", users.ryan.id);
 
-  console.log("Seeded approvers: 9 users, 24 ApproverAssignment rows.");
+  console.log(
+    "Seeded approvers: 9 users, 20 ApproverAssignment rows (12 Ministry Overseer, 6 COS1, 2 org-wide).",
+  );
   return users;
 }
 
