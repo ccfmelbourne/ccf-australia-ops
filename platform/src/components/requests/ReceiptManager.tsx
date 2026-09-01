@@ -19,7 +19,6 @@ interface SuggestionState {
   merchant: string;
   amount: string;
   date: string | null;
-  gst: number | null;
   editing: boolean;
 }
 
@@ -29,7 +28,6 @@ function toSuggestionState(receiptId: string, result: ReceiptExtractionResult): 
     merchant: result.merchant ?? "",
     amount: result.amount !== null ? result.amount.toFixed(2) : "",
     date: result.date,
-    gst: result.gst,
     editing: false,
   };
 }
@@ -44,10 +42,14 @@ export function ReceiptManager({
   const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isPending, startTransition] = useTransition();
+  // "uploading" then "scanning" -- a receipt is scanned automatically right
+  // after it's attached, no separate manual trigger. A scan failure isn't
+  // treated as an upload failure (the receipt itself did attach fine) --
+  // it just means no suggestion card appears.
+  const [phase, setPhase] = useState<"idle" | "uploading" | "scanning">("idle");
   // The suggestion card is purely a review step -- nothing is added as a
   // real line item until "Confirm" is clicked, and it never auto-populates
   // financial data without that explicit confirmation.
-  const [scanningReceiptId, setScanningReceiptId] = useState<string | null>(null);
   const [suggestion, setSuggestion] = useState<SuggestionState | null>(null);
   // Inline error state, not a toast -- ReceiptManager always renders inside
   // a native <dialog> (RequestDrawer.tsx), which the browser promotes to
@@ -62,16 +64,26 @@ export function ReceiptManager({
     const file = e.target.files?.[0];
     if (!file) return;
     setError(null);
+    setSuggestion(null);
     const formData = new FormData();
     formData.set("file", file);
     startTransition(async () => {
-      const result = await uploadReceiptAction(requestId, formData);
-      if (result.ok) {
-        router.refresh();
-      } else {
-        setError(result.error ?? "Something went wrong.");
+      setPhase("uploading");
+      const uploadResult = await uploadReceiptAction(requestId, formData);
+      if (!uploadResult.ok || !uploadResult.id) {
+        setError(uploadResult.error ?? "Something went wrong.");
+        setPhase("idle");
+        if (fileInputRef.current) fileInputRef.current.value = "";
+        return;
       }
-      // Clear so choosing the same file again still fires onChange.
+      router.refresh();
+
+      setPhase("scanning");
+      const scanResult = await extractReceiptAction(uploadResult.id);
+      setPhase("idle");
+      if (scanResult.ok && scanResult.result) {
+        setSuggestion(toSuggestionState(uploadResult.id, scanResult.result));
+      }
       if (fileInputRef.current) fileInputRef.current.value = "";
     });
   }
@@ -82,21 +94,6 @@ export function ReceiptManager({
       const result = await removeReceiptAction(receiptId);
       if (result.ok) {
         router.refresh();
-      } else {
-        setError(result.error ?? "Something went wrong.");
-      }
-    });
-  }
-
-  function handleScan(receiptId: string) {
-    setError(null);
-    setSuggestion(null);
-    setScanningReceiptId(receiptId);
-    startTransition(async () => {
-      const result = await extractReceiptAction(receiptId);
-      setScanningReceiptId(null);
-      if (result.ok && result.result) {
-        setSuggestion(toSuggestionState(receiptId, result.result));
       } else {
         setError(result.error ?? "Something went wrong.");
       }
@@ -154,14 +151,6 @@ export function ReceiptManager({
                 <button
                   type="button"
                   disabled={isPending}
-                  onClick={() => handleScan(r.id)}
-                  className="text-teal-700 hover:underline disabled:opacity-60"
-                >
-                  {scanningReceiptId === r.id ? "Scanning…" : "Scan for suggested information"}
-                </button>
-                <button
-                  type="button"
-                  disabled={isPending}
                   onClick={() => handleRemove(r.id)}
                   className="text-red-600 hover:underline disabled:opacity-60"
                 >
@@ -207,8 +196,6 @@ export function ReceiptManager({
                 "—"
               )}
             </dd>
-            <dt className="text-slate-500">GST</dt>
-            <dd>{suggestion.gst !== null ? `$${suggestion.gst.toFixed(2)}` : "—"}</dd>
           </dl>
           <div className="flex gap-3">
             <button
@@ -257,7 +244,7 @@ export function ReceiptManager({
           onClick={() => fileInputRef.current?.click()}
           className="self-start rounded-md bg-teal-600 px-4 py-2 text-sm font-semibold text-white hover:bg-teal-700 disabled:opacity-60"
         >
-          {isPending ? "Uploading…" : "Upload a receipt"}
+          {phase === "uploading" ? "Uploading…" : phase === "scanning" ? "Scanning…" : "Upload a receipt"}
         </button>
         <p className="text-xs text-slate-500">PDF, JPEG, PNG, or HEIC. Max 10MB.</p>
       </div>

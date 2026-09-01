@@ -154,11 +154,13 @@ export function VoucherDocument({
   receiptImages,
   unembeddableReceiptFilenames,
   signaturesByRole,
+  requesterSignature,
 }: {
   detail: ApprovedRequestDetail;
   receiptImages: ReceiptImageInput[];
   unembeddableReceiptFilenames: string[];
   signaturesByRole: Map<ApproverRoleValue, Buffer>;
+  requesterSignature: Buffer | null;
 }) {
   const generatedAt = new Date().toLocaleString("en-AU", { dateStyle: "medium", timeStyle: "short" });
 
@@ -214,6 +216,12 @@ export function VoucherDocument({
             <View style={styles.mainCol}>
               <Text style={styles.sectionTitle}>Requisitioned By</Text>
               <Text style={styles.fieldValue}>{detail.requesterName}</Text>
+              {requesterSignature ? (
+                // eslint-disable-next-line jsx-a11y/alt-text -- this is @react-pdf/renderer's PDF-drawing Image, not an HTML <img>; it has no alt prop
+                <Image src={{ data: requesterSignature, format: "png" }} style={styles.signatureImage} />
+              ) : (
+                <Text style={styles.noSignature}>No signature on file</Text>
+              )}
             </View>
             <View style={styles.sideCol}>
               <Text style={styles.sectionTitle}>Bank Details for Payment</Text>
@@ -360,6 +368,7 @@ export async function renderVoucherPdf(
   detail: ApprovedRequestDetail,
   receiptFiles: { filename: string; buffer: Buffer; contentType: string }[],
   signaturesByRole: Map<ApproverRoleValue, Buffer>,
+  requesterSignature: Buffer | null,
 ): Promise<RenderedVoucherPdf> {
   const receiptImages: ReceiptImageInput[] = [];
   const receiptPdfs: ReceiptPdfInput[] = [];
@@ -382,6 +391,7 @@ export async function renderVoucherPdf(
       receiptImages={receiptImages}
       unembeddableReceiptFilenames={unembeddableReceiptFilenames}
       signaturesByRole={signaturesByRole}
+      requesterSignature={requesterSignature}
     />,
   );
 

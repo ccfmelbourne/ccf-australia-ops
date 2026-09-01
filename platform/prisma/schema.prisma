@@ -124,6 +124,13 @@ model ReimbursementRequest {
   requiredApprovals RequiredApproval[]
   auditLog          AuditLogEntry[]
 
+  // R2 object key for the requester's own drawn signature (PNG), captured
+  // as the last step of every submission -- set fresh on each submitRequest
+  // call (request-data.ts), first submission and every resubmission alike,
+  // since each is its own attestation. The previous R2 object is deleted
+  // when a resubmission replaces it.
+  requesterSignatureStorageKey String?
+
   // Set only when Ross Callado (approval-routing.ts's
   // REGIONAL_DIRECTOR_OVERRIDE_CONFIRMER_EMAIL) explicitly confirms a
   // tier-4 request is within budget, as an alternative to waiting on

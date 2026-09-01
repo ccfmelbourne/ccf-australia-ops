@@ -48,7 +48,7 @@ function getFinanceNotificationEmail(): string {
 // file. Never a link, always a real attachment.
 export async function sendApprovedRequestEmail(detail: ApprovedRequestDetail): Promise<void> {
   const { subject, text } = buildApprovedRequestEmail(detail);
-  const [receiptFiles, signaturesByRole] = await Promise.all([
+  const [receiptFiles, signaturesByRole, requesterSignature] = await Promise.all([
     Promise.all(
       detail.receipts.map(async (r) => {
         const { buffer, contentType } = await downloadReceiptBytes(r.storageKey);
@@ -63,11 +63,15 @@ export async function sendApprovedRequestEmail(detail: ApprovedRequestDetail): P
           buffer: await downloadSignatureBytes(a.signatureStorageKey as string),
         })),
     ).then((entries) => new Map(entries.map((e) => [e.role, e.buffer]))),
+    detail.requesterSignatureStorageKey
+      ? downloadSignatureBytes(detail.requesterSignatureStorageKey)
+      : Promise.resolve(null),
   ]);
   const { buffer: voucherPdf, unembeddableReceiptFilenames } = await renderVoucherPdf(
     detail,
     receiptFiles,
     signaturesByRole,
+    requesterSignature,
   );
   const fallbackAttachments = receiptFiles
     .filter((file) => unembeddableReceiptFilenames.includes(file.filename))
