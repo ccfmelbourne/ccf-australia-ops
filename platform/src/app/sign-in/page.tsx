@@ -21,6 +21,27 @@ export default async function SignInPage() {
       >
         Sign in with Google
       </a>
+      {process.env.NODE_ENV !== "production" && (
+        <div className="flex flex-col items-center gap-2 border-t border-slate-200 pt-6">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+            Local testing only
+          </p>
+          <div className="flex gap-3">
+            <a
+              href="/api/dev/login?as=requester"
+              className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+            >
+              Log in as test requester
+            </a>
+            <a
+              href="/api/dev/login?as=approver"
+              className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+            >
+              Log in as test approver
+            </a>
+          </div>
+        </div>
+      )}
     </main>
   );
 }

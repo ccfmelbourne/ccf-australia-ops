@@ -56,10 +56,23 @@ export function getTier(totalAmount: number): ApprovalTier {
 // still rejects the whole request, same as every other role -- there's no
 // "try someone else" fallback. Corrected 2026-09-02 after an earlier,
 // wrong fixed-slot-per-person model.
+// Local/dev-testing-only identities (see src/app/api/dev/login/route.ts) --
+// only actually routed real approvals when NODE_ENV !== "production", so
+// the deployed app never treats DEV_TEST_APPROVER_EMAIL as a real pool
+// member even though it shares the same database as local dev.
+// approval-data.ts further scopes the dev approver identity to only ever
+// act on DEV_TEST_REQUESTER_EMAIL's own requests, never a real person's --
+// COS_POOL membership alone isn't request-scoped, so without that extra
+// check the dev approver could otherwise claim a real pending approval on
+// any tier-2+ request in the shared database.
+export const DEV_TEST_APPROVER_EMAIL = "dev-approver@test.local";
+export const DEV_TEST_REQUESTER_EMAIL = "dev-requester@test.local";
+
 export const COS_POOL = [
   "rosscallado@gmail.com",
   "joel.jmj@gmail.com",
   "vamiebpinlac@gmail.com",
+  ...(process.env.NODE_ENV === "production" ? [] : [DEV_TEST_APPROVER_EMAIL]),
 ] as const;
 
 // Tier 4's Regional Director requirement can be satisfied two ways: his

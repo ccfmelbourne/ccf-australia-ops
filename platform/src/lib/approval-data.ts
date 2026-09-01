@@ -4,7 +4,13 @@ import { getApprovedRequestDetail, receiptFilename } from "@/lib/request-data";
 import { sendApprovedRequestEmail } from "@/lib/notifications";
 import { getReceiptDownloadUrl } from "@/lib/receipt-storage";
 import { assertValidSignatureImage, buildSignatureStorageKey, uploadSignature } from "@/lib/signature-storage";
-import { getTier, COS_POOL, REGIONAL_DIRECTOR_OVERRIDE_CONFIRMER_EMAIL } from "@/lib/approval-routing";
+import {
+  getTier,
+  COS_POOL,
+  REGIONAL_DIRECTOR_OVERRIDE_CONFIRMER_EMAIL,
+  DEV_TEST_APPROVER_EMAIL,
+  DEV_TEST_REQUESTER_EMAIL,
+} from "@/lib/approval-routing";
 import type { ApproverRoleValue } from "@/lib/approval-routing";
 import type { RequestTypeValue, MinistryTypeValue } from "@/lib/request-types";
 
@@ -17,6 +23,24 @@ const CLAIMABLE_ROLES: ApproverRoleValue[] = ["COS1", "COS2"];
 async function resolveCosPoolUserIds(): Promise<string[]> {
   const users = await prisma.user.findMany({ where: { email: { in: [...COS_POOL] } } });
   return users.map((u) => u.id);
+}
+
+// Resolves the dev-only test identities (see src/app/api/dev/login/route.ts
+// and DEV_TEST_APPROVER_EMAIL/DEV_TEST_REQUESTER_EMAIL in
+// approval-routing.ts), null in production or if either hasn't signed in
+// yet. Used to scope the dev approver identity to only ever act on the
+// paired dev requester's own requests -- COS_POOL membership alone isn't
+// request-scoped, so without this a local dev session could otherwise
+// claim or decide a real person's real pending approval, since local dev
+// and production share the same database.
+async function resolveDevTestUserIds(): Promise<{ approverId: string; requesterId: string } | null> {
+  if (process.env.NODE_ENV === "production") return null;
+  const [approver, requester] = await Promise.all([
+    prisma.user.findUnique({ where: { email: DEV_TEST_APPROVER_EMAIL } }),
+    prisma.user.findUnique({ where: { email: DEV_TEST_REQUESTER_EMAIL } }),
+  ]);
+  if (!approver || !requester) return null;
+  return { approverId: approver.id, requesterId: requester.id };
 }
 
 export interface PendingApprovalLineItemView {
@@ -64,18 +88,31 @@ export interface PendingApprovalView {
 // slot doesn't see the remaining one either -- each slot needs a
 // different person.
 export async function getPendingApprovalsForUser(userId: string): Promise<PendingApprovalView[]> {
+  const devTestUsers = await resolveDevTestUserIds();
+  const isDevApproverIdentity = devTestUsers !== null && userId === devTestUsers.approverId;
+
   const poolUserIds = await resolveCosPoolUserIds();
-  const isPoolMember = poolUserIds.includes(userId);
+  // The dev approver identity's visibility is handled entirely by the
+  // scoped branch below instead -- forced false here so it doesn't also
+  // pick up the general pool-member OR clause (which isn't request-scoped).
+  const isPoolMember = isDevApproverIdentity ? false : poolUserIds.includes(userId);
 
   const approvals = await prisma.requiredApproval.findMany({
-    where: {
-      status: "PENDING",
-      request: { status: "IN_APPROVAL" },
-      OR: [
-        { approverUserId: userId },
-        ...(isPoolMember ? [{ role: { in: CLAIMABLE_ROLES }, approverUserId: null }] : []),
-      ],
-    },
+    where: isDevApproverIdentity
+      ? {
+          status: "PENDING",
+          // Every pending role, not just claimable ones -- but only on the
+          // paired dev requester's own requests, never a real person's.
+          request: { status: "IN_APPROVAL", requesterId: devTestUsers!.requesterId },
+        }
+      : {
+          status: "PENDING",
+          request: { status: "IN_APPROVAL" },
+          OR: [
+            { approverUserId: userId },
+            ...(isPoolMember ? [{ role: { in: CLAIMABLE_ROLES }, approverUserId: null }] : []),
+          ],
+        },
     include: {
       request: {
         include: { requester: true, lineItems: true, receipts: true, requiredApprovals: true },
@@ -190,6 +227,17 @@ export async function decideApproval(
     throw new Error("Approval not found.");
   }
 
+  const devTestUsers = await resolveDevTestUserIds();
+  const isDevApproverIdentity = devTestUsers !== null && userId === devTestUsers.approverId;
+  // Same scoping as getPendingApprovalsForUser -- the dev approver identity
+  // may only ever decide approvals on the paired dev requester's own
+  // requests, never a real person's, even though COS_POOL grants it pool
+  // membership across the whole shared database.
+  if (isDevApproverIdentity && approval.request.requesterId !== devTestUsers!.requesterId) {
+    throw new Error("Approval not found.");
+  }
+  const isDevApprover = isDevApproverIdentity;
+
   // COS1/COS2 are claimable, not pre-assigned -- ownership is checked
   // differently: any COS_POOL member can decide a still-unclaimed row
   // (approverUserId null), as long as they haven't already claimed the
@@ -231,7 +279,13 @@ export async function decideApproval(
     }
     claimingUserId = userId;
   } else if (approval.approverUserId !== userId) {
-    throw new Error("Approval not found.");
+    if (!isDevApprover) {
+      throw new Error("Approval not found.");
+    }
+    // Dev-only: attribute honestly to the dev approver identity rather
+    // than silently deciding on the real (pre-assigned) approver's behalf
+    // under their name.
+    claimingUserId = userId;
   }
 
   if (decision === "APPROVED" && !signatureBuffer) {
@@ -295,6 +349,15 @@ export async function requestChanges(approvalId: string, userId: string, comment
   if (!approval || approval.status !== "PENDING" || approval.request.status !== "IN_APPROVAL") {
     throw new Error("Approval not found.");
   }
+
+  // Same dev-approver scoping as decideApproval -- see the comment there.
+  const devTestUsers = await resolveDevTestUserIds();
+  const isDevApproverIdentity = devTestUsers !== null && userId === devTestUsers.approverId;
+  if (isDevApproverIdentity && approval.request.requesterId !== devTestUsers!.requesterId) {
+    throw new Error("Approval not found.");
+  }
+  const isDevApprover = isDevApproverIdentity;
+
   // Same claimable-role ownership check as decideApproval, minus the
   // claiming itself -- this doesn't touch the row's approverUserId
   // (deliberately, see the comment above), so any COS_POOL member can
@@ -304,7 +367,7 @@ export async function requestChanges(approvalId: string, userId: string, comment
     if (!poolUserIds.includes(userId)) {
       throw new Error("Approval not found.");
     }
-  } else if (approval.approverUserId !== userId) {
+  } else if (approval.approverUserId !== userId && !isDevApprover) {
     throw new Error("Approval not found.");
   }
 
