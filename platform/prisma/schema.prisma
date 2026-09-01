@@ -53,15 +53,15 @@ enum MinistryType {
   OCEANIA_REGIONAL
 }
 
+// SUBMITTED/READY_FOR_PROCESSING/PROCESSING/PROCESSED removed 2026-09-02 --
+// vestigial from before Finance retired from the app entirely (no in-app
+// transition has ever produced any of them; a request goes straight from
+// DRAFT to IN_APPROVAL, and terminates at APPROVED or REJECTED_RETURNED).
 enum RequestStatus {
   DRAFT
-  SUBMITTED
   IN_APPROVAL
   APPROVED
-  READY_FOR_PROCESSING
   NEEDS_CLARIFICATION
-  PROCESSING
-  PROCESSED
   REJECTED_RETURNED
 }
 

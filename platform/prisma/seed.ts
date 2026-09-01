@@ -135,7 +135,10 @@ async function seedDemoRequest(users: Record<NamedUserKey, { id: string }>) {
       ministryType: "COMMS_MEDIA",
       requesterId: requester.id,
       totalAmount: 245.8,
-      status: "READY_FOR_PROCESSING",
+      // Was READY_FOR_PROCESSING (a Finance-side status removed from the
+      // schema 2026-09-02) -- APPROVED is the closest current equivalent:
+      // fully approved, Finance already has the voucher PDF.
+      status: "APPROVED",
       submittedAt: new Date("2026-08-20"),
       lineItems: {
         create: [

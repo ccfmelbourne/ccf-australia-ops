@@ -7,6 +7,7 @@ import { ErrorBanner } from "@/components/ErrorBanner";
 import { decideApprovalAction, requestChangesAction } from "@/app/approvals/actions";
 import { REQUEST_TYPE_LABELS, MINISTRY_TYPE_LABELS } from "@/lib/request-types";
 import { getApproverRoleLabel } from "@/lib/approval-routing";
+import { RequestStatusBadge } from "@/components/RequestStatusBadge";
 import type { PendingApprovalView } from "@/lib/approval-data";
 
 // Same native-<dialog> side-panel pattern as RequestDrawer.tsx -- gives a
@@ -89,9 +90,14 @@ export function ApprovalDrawer({
       className="fixed inset-y-0 right-0 m-0 h-dvh w-full max-w-xl overflow-y-auto rounded-l-lg bg-white p-6 shadow-xl backdrop:bg-black/40"
     >
       <div className="flex items-center justify-between border-b border-slate-200 pb-4">
-        <h2 id="approval-drawer-title" className="text-lg font-bold text-slate-900">
-          {approval.voucherNo}
-        </h2>
+        <span className="flex items-center gap-2">
+          <h2 id="approval-drawer-title" className="text-lg font-bold text-slate-900">
+            {approval.voucherNo}
+          </h2>
+          {/* Reaching this drawer at all means the request is IN_APPROVAL --
+              same fixed status as ApprovalsTable.tsx's list. */}
+          <RequestStatusBadge status="IN_APPROVAL" />
+        </span>
         <button
           type="button"
           onClick={handleClose}
