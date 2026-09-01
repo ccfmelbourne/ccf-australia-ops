@@ -4,6 +4,7 @@ import { useEffect, useRef } from "react";
 import { REQUEST_TYPE_LABELS, MINISTRY_TYPE_LABELS } from "@/lib/request-types";
 import { getApproverRoleLabel } from "@/lib/approval-routing";
 import { RequestStatusBadge } from "@/components/RequestStatusBadge";
+import { MoneyStat } from "@/components/MoneyStat";
 import type { RequestProgressView, RequestProgressApprovalView } from "@/lib/request-data";
 
 function formatDate(iso: string | null): string {
@@ -172,6 +173,8 @@ export function RequestProgressDrawer({
           </div>
         )}
 
+        <MoneyStat label="Total reimbursement" amount={data.totalAmount} />
+
         <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-2 text-sm">
           <dt className="text-slate-500">Status</dt>
           <dd>
@@ -181,8 +184,6 @@ export function RequestProgressDrawer({
           <dd>{REQUEST_TYPE_LABELS[data.requestType]}</dd>
           <dt className="text-slate-500">Ministry</dt>
           <dd>{MINISTRY_TYPE_LABELS[data.ministryType]}</dd>
-          <dt className="text-slate-500">Total</dt>
-          <dd className="font-mono font-semibold">${data.totalAmount}</dd>
         </dl>
 
         <div>
@@ -199,6 +200,10 @@ export function RequestProgressDrawer({
                   <span className="font-mono">${li.amount}</span>
                 </li>
               ))}
+              <li className="flex justify-between border-t-2 border-slate-300 py-1.5 font-semibold">
+                <span>Total</span>
+                <span className="font-mono">${data.totalAmount}</span>
+              </li>
             </ul>
           )}
         </div>

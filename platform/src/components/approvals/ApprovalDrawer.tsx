@@ -8,6 +8,7 @@ import { decideApprovalAction, requestChangesAction } from "@/app/approvals/acti
 import { REQUEST_TYPE_LABELS, MINISTRY_TYPE_LABELS } from "@/lib/request-types";
 import { getApproverRoleLabel } from "@/lib/approval-routing";
 import { RequestStatusBadge } from "@/components/RequestStatusBadge";
+import { MoneyStat } from "@/components/MoneyStat";
 import type { PendingApprovalView } from "@/lib/approval-data";
 
 // Same native-<dialog> side-panel pattern as RequestDrawer.tsx -- gives a
@@ -109,6 +110,8 @@ export function ApprovalDrawer({
       </div>
 
       <div className="flex flex-col gap-6 pt-4">
+        <MoneyStat label="Total amount" amount={approval.totalAmount} />
+
         <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-2 text-sm">
           <dt className="text-slate-500">Requester</dt>
           <dd>{approval.requesterName}</dd>
@@ -118,8 +121,6 @@ export function ApprovalDrawer({
           <dd>{MINISTRY_TYPE_LABELS[approval.ministryType]}</dd>
           <dt className="text-slate-500">Your role</dt>
           <dd>{getApproverRoleLabel(approval.role, approval.ministryType)}</dd>
-          <dt className="text-slate-500">Total</dt>
-          <dd className="font-mono font-semibold">${approval.totalAmount}</dd>
         </dl>
 
         <div>
@@ -136,6 +137,10 @@ export function ApprovalDrawer({
                   <span className="font-mono">${li.amount}</span>
                 </li>
               ))}
+              <li className="flex justify-between border-t-2 border-slate-300 py-1.5 font-semibold">
+                <span>Total</span>
+                <span className="font-mono">${approval.totalAmount}</span>
+              </li>
             </ul>
           )}
         </div>
