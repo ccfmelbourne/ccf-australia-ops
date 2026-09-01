@@ -9,7 +9,6 @@ import {
   assertRequestIsEditable,
   addReceiptRecord,
   removeReceiptRecord,
-  getReceiptStorageKeyForOwner,
   upsertBankDetails,
   updateDraftRequestDetails,
   deleteDraftRequest,
@@ -22,10 +21,9 @@ import {
   buildReceiptStorageKey,
   uploadReceipt,
   deleteReceipt,
-  downloadReceiptBytes,
 } from "@/lib/receipt-storage";
 import { deleteSignature } from "@/lib/signature-storage";
-import { receiptExtractionService, type ReceiptExtractionResult } from "@/lib/receipt-extraction";
+import { receiptExtractionService } from "@/lib/receipt-extraction";
 
 const requestDetailsSchema = z.object({
   requestType: z.enum(REQUEST_TYPES),
@@ -179,10 +177,20 @@ export async function removeLineItemAction(
   }
 }
 
-export async function uploadReceiptAction(
+// Upload and scan in one call -- no separate manual "Scan" step. A scan
+// failure never blocks the upload itself (the receipt is still attached
+// either way); a scan that can't find both a merchant and a valid amount
+// leaves the receipt unscanned (extractedMerchant/extractedAmount/
+// scannedAt all null) rather than inventing partial data, and the
+// requester adds that line item manually, same as always. When both are
+// found, the line item is created automatically -- confirmed 2026-09-02
+// with the decision-maker as a deliberate reversal of this module's
+// original "OCR never writes without human confirmation" rule (see
+// receipt-extraction/types.ts).
+export async function uploadAndScanReceiptAction(
   requestId: string,
   formData: FormData,
-): Promise<{ ok: boolean; id?: string; error?: string }> {
+): Promise<{ ok: boolean; error?: string }> {
   const userId = await getCurrentUserId();
   if (!userId) {
     return { ok: false, error: "Not signed in." };
@@ -204,10 +212,25 @@ export async function uploadReceiptAction(
 
     const storageKey = buildReceiptStorageKey(requestId, file.name);
     await uploadReceipt(storageKey, buffer, file.type);
-    // Returned so the client can immediately scan the new receipt for
-    // suggested line-item information without a separate lookup.
-    const { id } = await addReceiptRecord(requestId, userId, storageKey);
-    return { ok: true, id };
+
+    let merchant: string | null = null;
+    let amount: number | null = null;
+    try {
+      const result = await receiptExtractionService.extract({ buffer, contentType: file.type });
+      merchant = result.merchant?.trim() || null;
+      amount = result.amount;
+    } catch {
+      // Scanning is a nicety layered on top of a successful upload -- an
+      // extraction failure (provider error, unreadable image) doesn't fail
+      // the upload, it just leaves this receipt unscanned.
+    }
+    const usable = merchant !== null && amount !== null && amount > 0;
+
+    await addReceiptRecord(requestId, userId, storageKey, usable ? { merchant: merchant!, amount: amount! } : null);
+    if (usable) {
+      await addLineItem(requestId, userId, merchant!, amount!);
+    }
+    return { ok: true };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : "Something went wrong." };
   }
@@ -269,30 +292,6 @@ export async function saveBankDetailsAction(
       parsed.data.accountNumber,
     );
     return { ok: true };
-  } catch (err) {
-    return { ok: false, error: err instanceof Error ? err.message : "Something went wrong." };
-  }
-}
-
-// Opt-in, purely a suggestion: returns extracted fields for the requester
-// to review/edit/discard in the UI. Never writes anything -- confirming a
-// suggestion still goes through the normal addLineItemAction, same as a
-// manually-typed line item.
-export async function extractReceiptAction(
-  receiptId: string,
-): Promise<{ ok: boolean; result?: ReceiptExtractionResult; error?: string }> {
-  const userId = await getCurrentUserId();
-  if (!userId) {
-    return { ok: false, error: "Not signed in." };
-  }
-  const storageKey = await getReceiptStorageKeyForOwner(receiptId, userId);
-  if (!storageKey) {
-    return { ok: false, error: "Receipt not found." };
-  }
-  try {
-    const { buffer, contentType } = await downloadReceiptBytes(storageKey);
-    const result = await receiptExtractionService.extract({ buffer, contentType });
-    return { ok: true, result };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : "Something went wrong." };
   }

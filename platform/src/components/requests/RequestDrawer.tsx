@@ -353,8 +353,8 @@ type WizardStep = 1 | 2 | 3 | 4;
 
 const WIZARD_STEP_LABELS: Record<WizardStep, string> = {
   1: "Details",
-  2: "Expenses",
-  3: "Receipts & Payment",
+  2: "Expenses & Receipts",
+  3: "Payment",
   4: "Review",
 };
 
@@ -523,12 +523,16 @@ function CreateWizard({ data, onClose }: { data: DraftRequestView; onClose: () =
     });
   }
 
-  const canContinueFromExpenses = data.lineItems.length > 0;
-  // Cash advances are requested before the money's spent -- nothing to
-  // attach a receipt for yet (mirrors submitRequest's own check,
-  // request-data.ts).
+  // Receipts moved into the same step as line items -- a receipt upload
+  // now auto-creates its own line item (ReceiptManager.tsx), so this is
+  // where a requester actually builds up their expenses, not a separate
+  // step reached later. Cash advances are requested before the money's
+  // spent -- nothing to attach a receipt for yet (mirrors submitRequest's
+  // own check, request-data.ts).
   const receiptRequired = data.requestType !== "CASH_ADVANCE";
-  const canContinueFromReceipts = (!receiptRequired || data.receipts.length > 0) && data.bankDetails !== null;
+  const canContinueFromExpenses =
+    data.lineItems.length > 0 && (!receiptRequired || data.receipts.length > 0);
+  const canContinueFromPayment = data.bankDetails !== null;
 
   const backButton = (
     <button
@@ -565,6 +569,7 @@ function CreateWizard({ data, onClose }: { data: DraftRequestView; onClose: () =
 
       {currentStep === 2 && (
         <>
+          <ReceiptManager requestId={data.id} receipts={data.receipts} />
           <LineItemManager requestId={data.id} lineItems={data.lineItems} totalAmount={data.totalAmount} />
           <div className="flex flex-col gap-2">
             <div className="flex justify-between">
@@ -579,7 +584,11 @@ function CreateWizard({ data, onClose }: { data: DraftRequestView; onClose: () =
               </button>
             </div>
             {!canContinueFromExpenses && (
-              <p className="text-right text-xs text-slate-500">Add at least one expense to continue.</p>
+              <p className="text-right text-xs text-slate-500">
+                {data.lineItems.length === 0
+                  ? "Add at least one expense to continue."
+                  : "Attach a receipt to continue."}
+              </p>
             )}
           </div>
         </>
@@ -587,26 +596,21 @@ function CreateWizard({ data, onClose }: { data: DraftRequestView; onClose: () =
 
       {currentStep === 3 && (
         <>
-          <ReceiptManager requestId={data.id} receipts={data.receipts} />
           <BankDetailsManager requestId={data.id} bankDetails={data.bankDetails} />
           <div className="flex flex-col gap-2">
             <div className="flex justify-between">
               {backButton}
               <button
                 type="button"
-                disabled={!canContinueFromReceipts}
+                disabled={!canContinueFromPayment}
                 onClick={goNext}
                 className="rounded-md bg-teal-600 px-4 py-2 text-sm font-semibold text-white hover:bg-teal-700 disabled:opacity-60"
               >
                 Continue →
               </button>
             </div>
-            {!canContinueFromReceipts && (
-              <p className="text-right text-xs text-slate-500">
-                {receiptRequired
-                  ? "Attach a receipt and save bank details to continue."
-                  : "Save bank details to continue."}
-              </p>
+            {!canContinueFromPayment && (
+              <p className="text-right text-xs text-slate-500">Save bank details to continue.</p>
             )}
           </div>
         </>

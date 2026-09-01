@@ -41,6 +41,13 @@ export interface DraftReceiptView {
   // popup-blocker/timing issues of fetching it on click; if it's expired
   // by the time someone clicks, reloading the page gets a fresh one.
   viewUrl: string;
+  // Set together, only when OCR extraction found both a merchant and a
+  // valid amount at upload time (uploadAndScanReceiptAction) -- null
+  // covers both "not scanned yet" and "scanned but nothing usable came
+  // back," which the UI renders the same way ("add manually").
+  extractedMerchant: string | null;
+  extractedAmount: string | null; // formatted
+  scannedAt: string | null; // ISO date
 }
 
 export interface DraftBankDetailsView {
@@ -235,6 +242,9 @@ export async function getDraftRequest(
       filename: receiptFilename(rec.storageKey),
       uploadedAt: rec.uploadedAt.toISOString(),
       viewUrl: await getReceiptDownloadUrl(rec.storageKey),
+      extractedMerchant: rec.extractedMerchant,
+      extractedAmount: rec.extractedAmount ? formatAmount(rec.extractedAmount) : null,
+      scannedAt: rec.scannedAt ? rec.scannedAt.toISOString() : null,
     })),
   );
   let returnReason: ReturnReasonView | null = null;
@@ -675,15 +685,26 @@ export async function removeLineItem(lineItemId: string, requesterId: string): P
 
 // The actual R2 upload happens separately (src/lib/receipt-storage.ts) --
 // this only records the resulting storageKey. Receipts don't affect
-// totalAmount, so a single create needs no transaction.
+// totalAmount, so a single create needs no transaction. `extraction` is
+// set only when uploadAndScanReceiptAction's OCR call found both a
+// merchant and a valid amount right after upload -- omitted (or null)
+// leaves the receipt's extracted* columns null, rendered as "add
+// manually" on its card.
 export async function addReceiptRecord(
   requestId: string,
   requesterId: string,
   storageKey: string,
+  extraction?: { merchant: string; amount: number } | null,
 ): Promise<{ id: string }> {
   await assertRequestIsEditable(requestId, requesterId);
   const receipt = await prisma.receipt.create({
-    data: { reimbursementRequestId: requestId, storageKey },
+    data: {
+      reimbursementRequestId: requestId,
+      storageKey,
+      extractedMerchant: extraction?.merchant ?? null,
+      extractedAmount: extraction?.amount ?? null,
+      scannedAt: extraction ? new Date() : null,
+    },
   });
   return { id: receipt.id };
 }

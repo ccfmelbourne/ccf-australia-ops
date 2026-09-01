@@ -154,6 +154,16 @@ model Receipt {
   request                ReimbursementRequest @relation(fields: [reimbursementRequestId], references: [id], onDelete: Cascade)
   storageKey             String
   uploadedAt             DateTime             @default(now())
+  // Set together, only when OCR extraction found both a merchant name and
+  // a valid positive amount right after upload -- that pair is what
+  // auto-creates a real LineItem (uploadAndScanReceiptAction,
+  // requests/actions.ts). scannedAt null covers both "hasn't been
+  // scanned yet" and "scanned but couldn't extract enough to act on" --
+  // both render the same "add manually" state on the receipt's card, no
+  // separate boolean needed.
+  extractedMerchant      String?
+  extractedAmount        Decimal?             @db.Decimal(12, 2)
+  scannedAt              DateTime?
 }
 
 // One-to-one, kept as its own table (not columns on ReimbursementRequest)
