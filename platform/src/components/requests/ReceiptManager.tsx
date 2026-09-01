@@ -184,7 +184,7 @@ export function ReceiptManager({
                   <span className="truncate font-mono text-xs text-slate-600">{r.filename}</span>
                   {r.scannedAt ? (
                     <p className="text-xs text-slate-700">
-                      {r.extractedMerchant} · ${r.extractedAmount}
+                      {r.extractedMerchant} · <span className="font-mono font-semibold">${r.extractedAmount}</span>
                       <br />
                       <span className="font-medium text-teal-700">✓ Scanned</span>
                     </p>

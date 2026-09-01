@@ -76,7 +76,7 @@ export function LineItemManager({
                     </td>
                   </tr>
                 ))}
-                <tr>
+                <tr className="border-t-2 border-slate-300">
                   <td className="py-2 font-semibold">Total</td>
                   <td className="py-2 text-right font-mono font-semibold">${totalAmount}</td>
                   <td />

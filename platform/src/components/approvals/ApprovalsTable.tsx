@@ -36,7 +36,7 @@ export function ApprovalsTable({ approvals }: { approvals: PendingApprovalView[]
                     {MINISTRY_TYPE_LABELS[a.ministryType]}
                   </span>
                 </span>
-                <span className="font-mono font-semibold text-slate-900">${a.totalAmount}</span>
+                <span className="font-mono text-lg font-bold text-slate-900">${a.totalAmount}</span>
               </button>
             </li>
           ))}

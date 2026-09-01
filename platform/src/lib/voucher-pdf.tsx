@@ -96,7 +96,13 @@ const styles = StyleSheet.create({
   row: { flexDirection: "row", borderBottomWidth: 1, borderBottomColor: "#dddddd", paddingVertical: 4 },
   descCell: { flex: 3 },
   amountCell: { flex: 1, textAlign: "right" },
-  totalRow: { flexDirection: "row", paddingTop: 6 },
+  totalRow: {
+    flexDirection: "row",
+    borderTopWidth: 1,
+    borderTopColor: "#333333",
+    paddingTop: 6,
+    marginTop: 2,
+  },
   totalLabel: { flex: 3, fontFamily: "Helvetica-Bold", textAlign: "right", paddingRight: 8 },
   totalValue: { flex: 1, fontFamily: "Helvetica-Bold", textAlign: "right" },
 

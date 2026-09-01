@@ -447,7 +447,7 @@ function ReviewStep({ data }: { data: DraftRequestView }) {
                 <td className="py-1 text-right font-mono">${li.amount}</td>
               </tr>
             ))}
-            <tr>
+            <tr className="border-t-2 border-slate-300">
               <td className="py-1 font-semibold">Total</td>
               <td className="py-1 text-right font-mono font-semibold">${data.totalAmount}</td>
             </tr>

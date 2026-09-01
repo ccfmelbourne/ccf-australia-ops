@@ -129,7 +129,7 @@ export function RequestsTable({
                   <td className="py-2 pr-2 font-mono">{r.voucherNo}</td>
                   <td className="py-2 pr-2">{REQUEST_TYPE_LABELS[r.requestType]}</td>
                   <td className="py-2 pr-2">{MINISTRY_TYPE_LABELS[r.ministryType]}</td>
-                  <td className="py-2 pr-6 text-right font-mono">${r.totalAmount}</td>
+                  <td className="py-2 pr-6 text-right font-mono font-semibold">${r.totalAmount}</td>
                   <td className="py-2 pr-2">
                     <RequestStatusBadge status={r.status} />
                   </td>

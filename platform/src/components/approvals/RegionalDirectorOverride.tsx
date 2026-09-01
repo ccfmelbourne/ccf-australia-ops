@@ -49,7 +49,7 @@ export function RegionalDirectorOverride({
                   {o.requesterName} · {MINISTRY_TYPE_LABELS[o.ministryType]}
                 </span>
               </span>
-              <span className="font-mono font-semibold text-slate-900">${o.totalAmount}</span>
+              <span className="font-mono text-lg font-bold text-slate-900">${o.totalAmount}</span>
             </div>
             <div className="mt-3">
               <button
