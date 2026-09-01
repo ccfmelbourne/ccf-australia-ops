@@ -40,7 +40,7 @@ const requestDetailsSchema = z.object({
 export async function createDraftRequestForDrawerAction(
   requestType: string,
   ministryType: string,
-): Promise<{ ok: boolean; id?: string; voucherNo?: string; error?: string }> {
+): Promise<{ ok: boolean; id?: string; voucherNo?: string; requesterName?: string; error?: string }> {
   const userId = await getCurrentUserId();
   if (!userId) {
     return { ok: false, error: "Not signed in." };
@@ -51,12 +51,12 @@ export async function createDraftRequestForDrawerAction(
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input" };
   }
 
-  const { id, voucherNo } = await createDraftRequest(
+  const { id, voucherNo, requesterName } = await createDraftRequest(
     userId,
     parsed.data.requestType,
     parsed.data.ministryType,
   );
-  return { ok: true, id, voucherNo };
+  return { ok: true, id, voucherNo, requesterName };
 }
 
 export async function updateRequestDetailsAction(

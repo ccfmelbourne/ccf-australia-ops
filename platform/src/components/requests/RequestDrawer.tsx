@@ -21,7 +21,37 @@ import { ReceiptManager } from "./ReceiptManager";
 import { BankDetailsManager } from "./BankDetailsManager";
 import { ErrorBanner } from "@/components/ErrorBanner";
 import { RequestStatusBadge } from "@/components/RequestStatusBadge";
+import { MoneyStat } from "@/components/MoneyStat";
+import { getTier, getRequiredApproverRoles } from "@/lib/approval-routing";
 import type { DraftRequestView } from "@/lib/request-data";
+
+// Masks all but the last 4 digits -- the review step's job here is to give
+// the requester confidence they're about to submit the right thing, not to
+// re-display sensitive account details in full a second time right before
+// submission.
+function maskAccountNumber(accountNumber: string): string {
+  const last4 = accountNumber.slice(-4);
+  return "•".repeat(Math.max(accountNumber.length - 4, 0)) + " " + last4;
+}
+
+// Mirrors submitRequest's own preconditions (request-data.ts), in the same
+// order, so a blocking problem surfaces as an inline error right when
+// Submit is clicked -- before the confirm dialog opens -- rather than only
+// after confirming. The wizard's own step gating (canContinueFromExpenses/
+// canContinueFromPayment) already stops most of this at the Continue
+// button, but it's re-checked here too: jumping back via the step pills to
+// remove a receipt or line item, then jumping forward to Review again,
+// bypasses that gate without re-validating it. The flat edit view
+// (EditContent) has no such per-step gating at all, so this is the only
+// check it gets before submitting.
+function getSubmitBlockingError(data: DraftRequestView): string | null {
+  if (data.lineItems.length === 0) return "Add at least one line item before submitting.";
+  if (!data.bankDetails) return "Add bank details before submitting.";
+  if (data.requestType !== "CASH_ADVANCE" && data.receipts.length === 0) {
+    return "Attach at least one receipt before submitting.";
+  }
+  return null;
+}
 
 // Sorted alphabetically by label for the dropdowns only -- REQUEST_TYPES/
 // MINISTRY_TYPES themselves stay in their original declared order (other
@@ -169,10 +199,11 @@ function CreateStep({ onCreated }: { onCreated: (data: DraftRequestView) => void
     startedRef.current = true;
     (async () => {
       const result = await createDraftRequestForDrawerAction(REQUEST_TYPES[0], MINISTRY_TYPES[0]);
-      if (result.ok && result.id && result.voucherNo) {
+      if (result.ok && result.id && result.voucherNo && result.requesterName) {
         onCreated({
           id: result.id,
           voucherNo: result.voucherNo,
+          requesterName: result.requesterName,
           requestType: REQUEST_TYPES[0],
           ministryType: MINISTRY_TYPES[0],
           totalAmount: "0.00",
@@ -299,25 +330,104 @@ function SignaturePad({ sigPadRef }: { sigPadRef: React.RefObject<SignatureCanva
   );
 }
 
+// A second, stacked native <dialog> -- browsers support multiple top-layer
+// modals, each showModal() pushes above the last, so this opens on top of
+// RequestDrawer's own <dialog> without any manual z-index/positioning.
+// Submitting a request can't be undone once approvers start deciding on
+// it, so this is a deliberate extra "are you sure" step rather than firing
+// straight off the Review step's Submit button.
+function SubmitConfirmDialog({
+  isResubmit,
+  isPending,
+  onConfirm,
+  onCancel,
+}: {
+  isResubmit: boolean;
+  isPending: boolean;
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  const dialogRef = useRef<HTMLDialogElement>(null);
+
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    if (dialog && !dialog.open) dialog.showModal();
+  }, []);
+
+  function handleClose() {
+    dialogRef.current?.close();
+  }
+
+  return (
+    <dialog
+      ref={dialogRef}
+      onClose={onCancel}
+      onClick={(e) => {
+        if (e.target === dialogRef.current) handleClose();
+      }}
+      aria-labelledby="submit-confirm-title"
+      className="m-auto w-full max-w-sm rounded-lg bg-white p-6 shadow-xl backdrop:bg-black/40"
+    >
+      <h3 id="submit-confirm-title" className="text-base font-bold text-slate-900">
+        {isResubmit ? "Resubmit reimbursement?" : "Submit reimbursement?"}
+      </h3>
+      <p className="mt-2 text-sm text-slate-600">
+        Your request will be sent to the required approvers for review.
+      </p>
+      <div className="mt-5 flex justify-end gap-3">
+        <button
+          type="button"
+          onClick={handleClose}
+          className="rounded-md border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100"
+        >
+          Cancel
+        </button>
+        <button
+          type="button"
+          disabled={isPending}
+          onClick={onConfirm}
+          className="rounded-md bg-teal-600 px-4 py-2 text-sm font-semibold text-white hover:bg-teal-700 disabled:opacity-60"
+        >
+          {isPending ? "Submitting…" : isResubmit ? "Resubmit request" : "Submit request"}
+        </button>
+      </div>
+    </dialog>
+  );
+}
+
 function EditContent({ data, onClose }: { data: DraftRequestView; onClose: () => void }) {
   const router = useRouter();
   const sigPadRef = useRef<SignatureCanvas>(null);
   const [isSubmitPending, startSubmitTransition] = useTransition();
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [showConfirm, setShowConfirm] = useState(false);
 
-  function handleSubmit() {
+  function handleSubmitClick() {
     setSubmitError(null);
+    const blockingError = getSubmitBlockingError(data);
+    if (blockingError) {
+      setSubmitError(blockingError);
+      return;
+    }
     if (!sigPadRef.current || sigPadRef.current.isEmpty()) {
       setSubmitError("Please sign to submit.");
       return;
     }
-    const signatureDataUrl = sigPadRef.current.getTrimmedCanvas().toDataURL("image/png");
+    setShowConfirm(true);
+  }
+
+  function handleConfirmedSubmit() {
+    // Signature was already validated non-empty in handleSubmitClick, and
+    // the canvas hasn't been touched since (the confirm dialog has no
+    // "back to edit" path that would let it change) -- safe to read again.
+    const signatureDataUrl = sigPadRef.current!.getTrimmedCanvas().toDataURL("image/png");
     startSubmitTransition(async () => {
       const result = await submitRequestAction(data.id, signatureDataUrl);
       if (result.ok) {
         router.refresh();
         onClose();
       } else {
+        setShowConfirm(false);
         setSubmitError(result.error ?? "Something went wrong.");
       }
     });
@@ -351,18 +461,21 @@ function EditContent({ data, onClose }: { data: DraftRequestView; onClose: () =>
         <button
           type="button"
           disabled={isSubmitPending}
-          onClick={handleSubmit}
+          onClick={handleSubmitClick}
           className="self-start rounded-md bg-teal-600 px-4 py-2 text-sm font-semibold text-white hover:bg-teal-700 disabled:opacity-60"
         >
-          {isSubmitPending
-            ? data.returnReason
-              ? "Resubmitting…"
-              : "Submitting…"
-            : data.returnReason
-              ? "Resubmit"
-              : "Submit"}
+          {data.returnReason ? "Resubmit" : "Submit"}
         </button>
       </div>
+
+      {showConfirm && (
+        <SubmitConfirmDialog
+          isResubmit={data.returnReason !== null}
+          isPending={isSubmitPending}
+          onConfirm={handleConfirmedSubmit}
+          onCancel={() => setShowConfirm(false)}
+        />
+      )}
     </>
   );
 }
@@ -424,69 +537,57 @@ function WizardSteps({
   );
 }
 
+// A confidence-building summary rather than a re-display of every detail
+// already confirmed in the earlier steps -- counts for expenses/receipts
+// and a masked account number, not the full line-item/receipt lists again.
+// The wizard's own line-item and receipt managers (steps 2-3) are where
+// something wrong actually gets fixed; this step's job is just "does this
+// look right" right before an irreversible submission.
 function ReviewStep({ data }: { data: DraftRequestView }) {
+  const tier = getTier(Number(data.totalAmount.replace(/,/g, "")));
+  const approverCount = getRequiredApproverRoles(tier).length;
+
   return (
     <div className="flex flex-col gap-4">
       <div>
-        <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">Details</p>
-        <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-sm">
-          <dt className="text-slate-500">Type</dt>
-          <dd>{REQUEST_TYPE_LABELS[data.requestType]}</dd>
-          <dt className="text-slate-500">Ministry</dt>
-          <dd>{MINISTRY_TYPE_LABELS[data.ministryType]}</dd>
-        </dl>
+        <p className="text-base font-bold text-slate-900">Review reimbursement</p>
+        <div className="mt-3 border-t border-slate-200" />
       </div>
 
-      <div>
-        <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">Expenses</p>
-        <table className="w-full border-collapse text-sm">
-          <tbody>
-            {data.lineItems.map((li) => (
-              <tr key={li.id} className="border-b border-slate-100">
-                <td className="py-1">{li.description}</td>
-                <td className="py-1 text-right font-mono">${li.amount}</td>
-              </tr>
-            ))}
-            <tr className="border-t-2 border-slate-300">
-              <td className="py-1 font-semibold">Total</td>
-              <td className="py-1 text-right font-mono font-semibold">${data.totalAmount}</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
+      <MoneyStat label="Total" amount={data.totalAmount} />
 
-      <div>
-        <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">Receipts</p>
-        {data.receipts.length === 0 ? (
-          <p className="text-sm text-slate-500">
-            {data.requestType === "CASH_ADVANCE" ? "Not required for cash advances." : "None attached."}
-          </p>
-        ) : (
-          <ul className="flex flex-col gap-1 text-sm">
-            {data.receipts.map((r) => (
-              <li key={r.id} className="truncate font-mono text-slate-700">
-                {r.filename}
-              </li>
-            ))}
-          </ul>
+      <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-3 text-sm">
+        <dt className="text-slate-500">Requester</dt>
+        <dd className="font-medium text-slate-900">{data.requesterName}</dd>
+        <dt className="text-slate-500">Type</dt>
+        <dd className="font-medium text-slate-900">{REQUEST_TYPE_LABELS[data.requestType]}</dd>
+        <dt className="text-slate-500">Ministry</dt>
+        <dd className="font-medium text-slate-900">{MINISTRY_TYPE_LABELS[data.ministryType]}</dd>
+        <dt className="text-slate-500">Expenses</dt>
+        <dd className="font-medium text-slate-900">
+          {data.lineItems.length} item{data.lineItems.length === 1 ? "" : "s"}
+        </dd>
+        <dt className="text-slate-500">Receipts</dt>
+        <dd className="font-medium text-slate-900">
+          {data.receipts.length > 0
+            ? `${data.receipts.length} attached`
+            : data.requestType === "CASH_ADVANCE"
+              ? "Not required"
+              : "None attached"}
+        </dd>
+        <dt className="text-slate-500">Approval route</dt>
+        <dd className="font-medium text-slate-900">
+          {approverCount} approver{approverCount === 1 ? "" : "s"}
+        </dd>
+        {data.bankDetails && (
+          <>
+            <dt className="text-slate-500">Bank account</dt>
+            <dd className="font-mono font-medium text-slate-900">
+              {maskAccountNumber(data.bankDetails.accountNumber)}
+            </dd>
+          </>
         )}
-      </div>
-
-      {data.bankDetails && (
-        <div>
-          <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
-            Bank details
-          </p>
-          <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-sm">
-            <dt className="text-slate-500">Account name</dt>
-            <dd>{data.bankDetails.accountName}</dd>
-            <dt className="text-slate-500">BSB</dt>
-            <dd>{data.bankDetails.bsb}</dd>
-            <dt className="text-slate-500">Account number</dt>
-            <dd>{data.bankDetails.accountNumber}</dd>
-          </dl>
-        </div>
-      )}
+      </dl>
     </div>
   );
 }
@@ -507,6 +608,7 @@ function CreateWizard({ data, onClose }: { data: DraftRequestView; onClose: () =
   const [furthestStep, setFurthestStep] = useState<WizardStep>(1);
   const [isSubmitPending, startSubmitTransition] = useTransition();
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [showConfirm, setShowConfirm] = useState(false);
 
   function goTo(step: WizardStep) {
     if (step > furthestStep) return;
@@ -523,19 +625,32 @@ function CreateWizard({ data, onClose }: { data: DraftRequestView; onClose: () =
     setCurrentStep((s) => Math.max(s - 1, 1) as WizardStep);
   }
 
-  function handleSubmit() {
+  function handleSubmitClick() {
     setSubmitError(null);
+    const blockingError = getSubmitBlockingError(data);
+    if (blockingError) {
+      setSubmitError(blockingError);
+      return;
+    }
     if (!sigPadRef.current || sigPadRef.current.isEmpty()) {
       setSubmitError("Please sign to submit.");
       return;
     }
-    const signatureDataUrl = sigPadRef.current.getTrimmedCanvas().toDataURL("image/png");
+    setShowConfirm(true);
+  }
+
+  function handleConfirmedSubmit() {
+    // Signature was already validated non-empty in handleSubmitClick, and
+    // the confirm dialog has no path back to the canvas that would let it
+    // change -- safe to read again.
+    const signatureDataUrl = sigPadRef.current!.getTrimmedCanvas().toDataURL("image/png");
     startSubmitTransition(async () => {
       const result = await submitRequestAction(data.id, signatureDataUrl);
       if (result.ok) {
         router.refresh();
         onClose();
       } else {
+        setShowConfirm(false);
         setSubmitError(result.error ?? "Something went wrong.");
       }
     });
@@ -645,14 +760,23 @@ function CreateWizard({ data, onClose }: { data: DraftRequestView; onClose: () =
               <button
                 type="button"
                 disabled={isSubmitPending}
-                onClick={handleSubmit}
+                onClick={handleSubmitClick}
                 className="rounded-md bg-teal-600 px-4 py-2 text-sm font-semibold text-white hover:bg-teal-700 disabled:opacity-60"
               >
-                {isSubmitPending ? "Submitting…" : "Submit"}
+                Submit reimbursement
               </button>
             </div>
           </div>
         </>
+      )}
+
+      {showConfirm && (
+        <SubmitConfirmDialog
+          isResubmit={false}
+          isPending={isSubmitPending}
+          onConfirm={handleConfirmedSubmit}
+          onCancel={() => setShowConfirm(false)}
+        />
       )}
     </>
   );
