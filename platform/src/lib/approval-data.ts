@@ -4,8 +4,20 @@ import { getApprovedRequestDetail, receiptFilename } from "@/lib/request-data";
 import { sendApprovedRequestEmail } from "@/lib/notifications";
 import { getReceiptDownloadUrl } from "@/lib/receipt-storage";
 import { assertValidSignatureImage, buildSignatureStorageKey, uploadSignature } from "@/lib/signature-storage";
-import { getTier, REGIONAL_DIRECTOR_OVERRIDE_COMMITTEE_EMAILS } from "@/lib/approval-routing";
+import { getTier, COS_POOL, REGIONAL_DIRECTOR_OVERRIDE_CONFIRMER_EMAIL } from "@/lib/approval-routing";
+import type { ApproverRoleValue } from "@/lib/approval-routing";
 import type { RequestTypeValue, MinistryTypeValue } from "@/lib/request-types";
+
+// COS1/COS2 are claimable, not pre-assigned -- any of the 3 COS_POOL
+// members can decide one, whichever they get to first (approval-data.ts's
+// decideApproval sets approverUserId at decision time). Each needed slot
+// must be claimed by a different person.
+const CLAIMABLE_ROLES: ApproverRoleValue[] = ["COS1", "COS2"];
+
+async function resolveCosPoolUserIds(): Promise<string[]> {
+  const users = await prisma.user.findMany({ where: { email: { in: [...COS_POOL] } } });
+  return users.map((u) => u.id);
+}
 
 export interface PendingApprovalLineItemView {
   description: string;
@@ -40,23 +52,53 @@ export interface PendingApprovalView {
 // (not just this row's own PENDING status) hides a row once its request
 // has already been fully approved/rejected via a sibling decision, without
 // needing to touch sibling rows.
+//
+// A COS1/COS2 row is only ever visible to a request's Ministry Overseer
+// (rare -- own-ministry request) or to a COS_POOL member, and only when
+// it's still unclaimed (approverUserId null). Tier 2 is the one tier where
+// Ministry Overseer and COS coexist -- there, the COS row also stays
+// hidden until Overseer has approved (decideApproval enforces this too;
+// this is just so it doesn't show as actionable before then). Tier 3/4
+// requests have no Ministry Overseer row at all, so that gate is a no-op
+// for them. A pool member who's already claimed the request's other COS
+// slot doesn't see the remaining one either -- each slot needs a
+// different person.
 export async function getPendingApprovalsForUser(userId: string): Promise<PendingApprovalView[]> {
+  const poolUserIds = await resolveCosPoolUserIds();
+  const isPoolMember = poolUserIds.includes(userId);
+
   const approvals = await prisma.requiredApproval.findMany({
     where: {
-      approverUserId: userId,
       status: "PENDING",
       request: { status: "IN_APPROVAL" },
+      OR: [
+        { approverUserId: userId },
+        ...(isPoolMember ? [{ role: { in: CLAIMABLE_ROLES }, approverUserId: null }] : []),
+      ],
     },
     include: {
       request: {
-        include: { requester: true, lineItems: true, receipts: true },
+        include: { requester: true, lineItems: true, receipts: true, requiredApprovals: true },
       },
     },
     orderBy: { request: { submittedAt: "asc" } },
   });
 
+  const visible = approvals.filter((a) => {
+    const isClaimableSlot = CLAIMABLE_ROLES.includes(a.role) && a.approverUserId === null;
+    if (!isClaimableSlot) return true;
+
+    const overseerRow = a.request.requiredApprovals.find((r) => r.role === "MINISTRY_OVERSEER");
+    if (overseerRow && overseerRow.status !== "APPROVED") return false;
+
+    const alreadyClaimedByThisUser = a.request.requiredApprovals.some(
+      (r) => CLAIMABLE_ROLES.includes(r.role) && r.approverUserId === userId,
+    );
+    return !alreadyClaimedByThisUser;
+  });
+
   return Promise.all(
-    approvals.map(async (a) => ({
+    visible.map(async (a) => ({
       approvalId: a.id,
       role: a.role,
       requestId: a.request.id,
@@ -79,35 +121,36 @@ export async function getPendingApprovalsForUser(userId: string): Promise<Pendin
   );
 }
 
-// A tier-4 request's REGIONAL_DIRECTOR row can be satisfied two ways
-// (specs/0001's confirmed Regional Director / COS-committee override
-// rule) -- every other role still needs a flat APPROVED, but
-// REGIONAL_DIRECTOR itself counts as satisfied if either it's directly
-// APPROVED, or a RegionalDirectorOverride exists with all 3 committee
-// members unanimous (withinBudget). Kept as the one place this decision is
-// made, per spec 0002's "Approval branching" note, rather than duplicating
-// this logic at each call site.
+// A tier-4 request's REGIONAL_DIRECTOR row can be satisfied two ways:
+// directly APPROVED, or (as an alternative) the request's
+// regionalDirectorOverrideConfirmedAt being set -- Ross Callado's explicit
+// "within budget" confirmation, gated on COS1+COS2 both already APPROVED
+// (confirmRegionalDirectorOverride enforces that precondition before ever
+// setting the timestamp, so it's not re-checked here). Every other role
+// still needs a flat APPROVED.
 function isFullyApproved(
   requiredApprovals: { role: string; status: string }[],
-  override: { withinBudget: boolean } | null,
+  regionalDirectorOverrideConfirmedAt: Date | null,
 ): boolean {
   const nonRegional = requiredApprovals.filter((a) => a.role !== "REGIONAL_DIRECTOR");
   if (!nonRegional.every((a) => a.status === "APPROVED")) return false;
   const regional = requiredApprovals.find((a) => a.role === "REGIONAL_DIRECTOR");
   if (!regional) return true; // tier < 4, no such row exists at all
-  return regional.status === "APPROVED" || override?.withinBudget === true;
+  return regional.status === "APPROVED" || regionalDirectorOverrideConfirmedAt !== null;
 }
 
 // Two places can newly complete a request's approval: a regular
-// decideApproval("APPROVED") call, and overrideApprove's third/final
-// committee vote. Both call this instead of duplicating the
-// finalize-and-notify logic.
+// decideApproval("APPROVED") call, and confirmRegionalDirectorOverride.
+// Both call this instead of duplicating the finalize-and-notify logic.
 async function finalizeIfFullyApproved(requestId: string): Promise<void> {
-  const [requiredApprovals, override] = await Promise.all([
+  const [requiredApprovals, request] = await Promise.all([
     prisma.requiredApproval.findMany({ where: { reimbursementRequestId: requestId } }),
-    prisma.regionalDirectorOverride.findUnique({ where: { reimbursementRequestId: requestId } }),
+    prisma.reimbursementRequest.findUnique({
+      where: { id: requestId },
+      select: { regionalDirectorOverrideConfirmedAt: true },
+    }),
   ]);
-  if (!isFullyApproved(requiredApprovals, override)) return;
+  if (!request || !isFullyApproved(requiredApprovals, request.regionalDirectorOverrideConfirmedAt)) return;
 
   await prisma.reimbursementRequest.update({
     where: { id: requestId },
@@ -143,14 +186,54 @@ export async function decideApproval(
     where: { id: approvalId },
     include: { request: true },
   });
-  if (
-    !approval ||
-    approval.approverUserId !== userId ||
-    approval.status !== "PENDING" ||
-    approval.request.status !== "IN_APPROVAL"
-  ) {
+  if (!approval || approval.status !== "PENDING" || approval.request.status !== "IN_APPROVAL") {
     throw new Error("Approval not found.");
   }
+
+  // COS1/COS2 are claimable, not pre-assigned -- ownership is checked
+  // differently: any COS_POOL member can decide a still-unclaimed row
+  // (approverUserId null), as long as they haven't already claimed the
+  // request's other COS slot. Everything else keeps the exact-match
+  // ownership check. Tier 2's Ministry-Overseer-first gate only applies
+  // when an Overseer row actually exists for this request (tier 3/4 have
+  // none, so this is a no-op for them) -- defensive check, since
+  // getPendingApprovalsForUser already hides the row from that pool
+  // member's queue until Overseer has approved.
+  let claimingUserId: string | null = null;
+  if (CLAIMABLE_ROLES.includes(approval.role)) {
+    if (approval.approverUserId !== null) {
+      throw new Error("Approval not found.");
+    }
+    const overseerRow = await prisma.requiredApproval.findUnique({
+      where: {
+        reimbursementRequestId_role: {
+          reimbursementRequestId: approval.reimbursementRequestId,
+          role: "MINISTRY_OVERSEER",
+        },
+      },
+    });
+    if (overseerRow && overseerRow.status !== "APPROVED") {
+      throw new Error("Ministry Overseer must approve first.");
+    }
+    const poolUserIds = await resolveCosPoolUserIds();
+    if (!poolUserIds.includes(userId)) {
+      throw new Error("Approval not found.");
+    }
+    const alreadyClaimed = await prisma.requiredApproval.findFirst({
+      where: {
+        reimbursementRequestId: approval.reimbursementRequestId,
+        role: { in: CLAIMABLE_ROLES },
+        approverUserId: userId,
+      },
+    });
+    if (alreadyClaimed) {
+      throw new Error("You've already approved a COS slot on this request.");
+    }
+    claimingUserId = userId;
+  } else if (approval.approverUserId !== userId) {
+    throw new Error("Approval not found.");
+  }
+
   if (decision === "APPROVED" && !signatureBuffer) {
     throw new Error("A signature is required to approve.");
   }
@@ -164,7 +247,13 @@ export async function decideApproval(
 
   await prisma.requiredApproval.update({
     where: { id: approvalId },
-    data: { status: decision, decidedAt: new Date(), comments, signatureStorageKey },
+    data: {
+      status: decision,
+      decidedAt: new Date(),
+      comments,
+      signatureStorageKey,
+      ...(claimingUserId ? { approverUserId: claimingUserId } : {}),
+    },
   });
 
   if (decision === "REJECTED") {
@@ -203,12 +292,19 @@ export async function requestChanges(approvalId: string, userId: string, comment
     where: { id: approvalId },
     include: { request: true },
   });
-  if (
-    !approval ||
-    approval.approverUserId !== userId ||
-    approval.status !== "PENDING" ||
-    approval.request.status !== "IN_APPROVAL"
-  ) {
+  if (!approval || approval.status !== "PENDING" || approval.request.status !== "IN_APPROVAL") {
+    throw new Error("Approval not found.");
+  }
+  // Same claimable-role ownership check as decideApproval, minus the
+  // claiming itself -- this doesn't touch the row's approverUserId
+  // (deliberately, see the comment above), so any COS_POOL member can
+  // request changes on a still-unclaimed slot without claiming it.
+  if (CLAIMABLE_ROLES.includes(approval.role) && approval.approverUserId === null) {
+    const poolUserIds = await resolveCosPoolUserIds();
+    if (!poolUserIds.includes(userId)) {
+      throw new Error("Approval not found.");
+    }
+  } else if (approval.approverUserId !== userId) {
     throw new Error("Approval not found.");
   }
 
@@ -230,105 +326,56 @@ export async function requestChanges(approvalId: string, userId: string, comment
   });
 }
 
-// Starts the tier-4 committee-override path (specs/0001) as an alternative
-// to waiting on the Regional Director -- callable by the requester or any
-// of the three fixed committee members (REGIONAL_DIRECTOR_OVERRIDE_
-// COMMITTEE_EMAILS, approval-routing.ts), per the decision-maker's call to
-// widen this beyond just the requester. Doesn't touch the REGIONAL_DIRECTOR
-// RequiredApproval row -- it stays PENDING and can still be decided
-// directly; the two paths are alternatives, not a cancellation of one by
-// the other.
-export async function requestOverride(requestId: string, userId: string): Promise<void> {
+// Ross Callado's explicit "within budget" confirmation -- the alternative
+// to waiting on direct Regional Director approval for a tier-4 request
+// (approval-routing.ts's REGIONAL_DIRECTOR_OVERRIDE_CONFIRMER_EMAIL).
+// Requires COS1+COS2 (already required for tier 4 regardless) to both be
+// APPROVED first -- confirming before the normal baseline is even done
+// doesn't match the decision-maker's "only once Regional Director's been
+// pending a week or more" framing. Doesn't touch the REGIONAL_DIRECTOR
+// row itself -- it stays PENDING and can still be decided directly; the
+// two paths are alternatives, not a cancellation of one by the other.
+export async function confirmRegionalDirectorOverride(requestId: string, userId: string): Promise<void> {
   const request = await prisma.reimbursementRequest.findUnique({
     where: { id: requestId },
-    include: { regionalOverride: true },
+    include: { requiredApprovals: true },
   });
   if (!request || request.status !== "IN_APPROVAL") {
     throw new Error("Request not found.");
   }
   if (getTier(Number(request.totalAmount)) !== 4) {
-    throw new Error("The committee override only applies to tier-4 (over $5,000) requests.");
+    throw new Error("This confirmation only applies to tier-4 (over $5,000) requests.");
   }
-  if (request.regionalOverride) {
-    throw new Error("A committee override has already been requested for this request.");
+  if (request.regionalDirectorOverrideConfirmedAt) {
+    throw new Error("This request has already been confirmed.");
   }
-  const regionalRow = await prisma.requiredApproval.findUnique({
-    where: { reimbursementRequestId_role: { reimbursementRequestId: requestId, role: "REGIONAL_DIRECTOR" } },
-  });
+  const regionalRow = request.requiredApprovals.find((a) => a.role === "REGIONAL_DIRECTOR");
   if (!regionalRow || regionalRow.status !== "PENDING") {
     throw new Error("Regional Director approval is no longer pending.");
   }
-
-  const committeeUsers = await prisma.user.findMany({
-    where: { email: { in: [...REGIONAL_DIRECTOR_OVERRIDE_COMMITTEE_EMAILS] } },
-  });
-  if (committeeUsers.length !== REGIONAL_DIRECTOR_OVERRIDE_COMMITTEE_EMAILS.length) {
-    throw new Error("The override committee is not fully set up.");
+  const cos1 = request.requiredApprovals.find((a) => a.role === "COS1");
+  const cos2 = request.requiredApprovals.find((a) => a.role === "COS2");
+  if (cos1?.status !== "APPROVED" || cos2?.status !== "APPROVED") {
+    throw new Error("Both COS approvals are required before confirming.");
   }
-  if (userId !== request.requesterId && !committeeUsers.some((u) => u.id === userId)) {
-    throw new Error("Only the requester or a committee member can request this override.");
+  const confirmer = await prisma.user.findUnique({
+    where: { email: REGIONAL_DIRECTOR_OVERRIDE_CONFIRMER_EMAIL },
+  });
+  if (!confirmer || confirmer.id !== userId) {
+    throw new Error("Only Ross Callado can confirm this.");
   }
 
-  await prisma.regionalDirectorOverride.create({
-    data: {
-      reimbursementRequestId: requestId,
-      approvals: { create: committeeUsers.map((u) => ({ approverUserId: u.id })) },
-    },
+  await prisma.reimbursementRequest.update({
+    where: { id: requestId },
+    data: { regionalDirectorOverrideConfirmedAt: new Date() },
   });
-
   await prisma.auditLogEntry.create({
     data: {
       reimbursementRequestId: requestId,
       actorUserId: userId,
-      action: "OVERRIDE_REQUESTED",
+      action: "REGIONAL_DIRECTOR_OVERRIDE_CONFIRMED",
     },
   });
+  await finalizeIfFullyApproved(requestId);
 }
 
-// One of the three committee members casts their vote. Unanimous approval
-// *is* the within-budget attestation (per spec 0001, no separate
-// budget-plan lookup) -- the third "yes" both flips withinBudget and
-// (via finalizeIfFullyApproved) can complete the whole request if every
-// other role is already APPROVED too. A "no" just records a no; V1
-// deliberately doesn't add any retry/escalation flow beyond what the
-// requester/committee can already see in the request's progress view.
-export async function overrideApprove(
-  overrideApprovalId: string,
-  userId: string,
-  approved: boolean,
-): Promise<void> {
-  const overrideApproval = await prisma.overrideApproval.findUnique({
-    where: { id: overrideApprovalId },
-    include: { override: true },
-  });
-  if (!overrideApproval || overrideApproval.approverUserId !== userId || overrideApproval.decidedAt !== null) {
-    throw new Error("Override approval not found.");
-  }
-
-  await prisma.overrideApproval.update({
-    where: { id: overrideApprovalId },
-    data: { approved, decidedAt: new Date() },
-  });
-
-  await prisma.auditLogEntry.create({
-    data: {
-      reimbursementRequestId: overrideApproval.override.reimbursementRequestId,
-      actorUserId: userId,
-      action: "OVERRIDE_APPROVAL_DECIDED",
-      details: { approved },
-    },
-  });
-
-  if (!approved) return;
-
-  const allApprovals = await prisma.overrideApproval.findMany({
-    where: { overrideId: overrideApproval.overrideId },
-  });
-  if (!allApprovals.every((a) => a.approved)) return;
-
-  await prisma.regionalDirectorOverride.update({
-    where: { id: overrideApproval.overrideId },
-    data: { withinBudget: true },
-  });
-  await finalizeIfFullyApproved(overrideApproval.override.reimbursementRequestId);
-}

@@ -11,6 +11,7 @@
 import { PrismaClient } from "../src/generated/prisma/client.ts";
 import type { MinistryType, ApproverRole } from "../src/generated/prisma/client.ts";
 import { PrismaPg } from "@prisma/adapter-pg";
+import { COS_POOL } from "../src/lib/approval-routing.ts";
 import "dotenv/config";
 
 const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL });
@@ -18,17 +19,16 @@ const prisma = new PrismaClient({ adapter });
 
 // Confirmed 2026-08-31 with the decision-maker -- see .ai/WORKLOG.md and
 // specs/0002-reimbursement-data-model-api.md for the full reasoning. One
-// named approver per ministry type (no COS2 anywhere -- a pre-existing gap
-// in the pilot's own reference data, not something new), plus two org-wide
-// roles (Finance Overseer, Regional Director).
+// named Ministry Overseer per ministry type.
 //
-// Corrected 2026-09-01: the original assumption that every Ministry
-// Overseer also automatically holds COS1 for their ministry was wrong
+// Corrected 2026-09-01: COS isn't a per-ministry slot at all -- it's a
+// single shared, org-wide pool of exactly three people (COS_POOL,
+// approval-routing.ts), seeded below the same way as Finance
+// Overseer/Regional Director. The original assumption that every Ministry
+// Overseer also automatically held COS1 for their ministry was wrong
 // (confirmed via a real approver, Dexter Santiago, reporting he only holds
-// COMMS_MEDIA's Ministry Overseer role, not COS1). See
-// MINISTRIES_WITH_SAME_PERSON_AS_COS1 below for which ministries actually
-// have the same person holding both roles. B1G's overseer also moved back
-// to Vamie Pinlac (Robert Cruz removed).
+// COMMS_MEDIA's Ministry Overseer role). B1G's overseer also moved back to
+// Vamie Pinlac (Robert Cruz removed).
 const NAMED_USERS = {
   ross: { name: "Ross Callado", email: "rosscallado@gmail.com" },
   joel: { name: "Joel Jerez", email: "joel.jmj@gmail.com" },
@@ -38,9 +38,8 @@ const NAMED_USERS = {
   dexter: { name: "Dexter Santiago", email: "dexsans@gmail.com" },
   moriz: { name: "Moriz Manlangit", email: "moriz.manlangit@gmail.com" },
   ryan: { name: "Ptr. Ryan Escobar", email: "ryanescobar@gmail.com" },
-  // Also the Ministry Overseer + COS for B1G (see MINISTRY_OVERSEERS below)
-  // and still one of the 3 fixed named COS for the tier-4 override path --
-  // see approval-routing.ts's REGIONAL_DIRECTOR_OVERRIDE_COMMITTEE_EMAILS.
+  // B1G's Ministry Overseer (see MINISTRY_OVERSEERS below) and also one of
+  // the three COS_POOL members (approval-routing.ts).
   vamie: { name: "Vamie Pinlac", email: "vamiebpinlac@gmail.com" },
 } as const;
 
@@ -60,20 +59,6 @@ const MINISTRY_OVERSEERS: Record<MinistryType, NamedUserKey> = {
   DGM: "moriz",
   OCEANIA_REGIONAL: "ryan",
 };
-
-// Ministries where the same named person holds both Ministry Overseer and
-// COS1 -- confirmed 2026-09-01 with the decision-maker, ministry by
-// ministry (not assumed automatically like before). Everywhere else, COS1
-// is currently unassigned -- the same kind of gap COS2 already has
-// everywhere, not something new.
-const MINISTRIES_WITH_SAME_PERSON_AS_COS1 = new Set<MinistryType>([
-  "ADMIN",
-  "EXALT_LIVE_PROD",
-  "FINANCE",
-  "NXTGEN",
-  "PASTORAL_CARE",
-  "B1G",
-]);
 
 async function upsertOrgWideAssignment(role: ApproverRole, userId: string) {
   const existing = await prisma.approverAssignment.findFirst({
@@ -104,30 +89,26 @@ async function seedApprovers() {
       update: { userId: users[userKey].id },
       create: { role: "MINISTRY_OVERSEER", ministryType, userId: users[userKey].id },
     });
-
-    if (MINISTRIES_WITH_SAME_PERSON_AS_COS1.has(ministryType)) {
-      await prisma.approverAssignment.upsert({
-        where: { role_ministryType: { role: "COS1", ministryType } },
-        update: { userId: users[userKey].id },
-        create: { role: "COS1", ministryType, userId: users[userKey].id },
-      });
-    } else {
-      // COS1 is a gap for this ministry -- remove any stale row left over
-      // from before the 2026-09-01 correction (e.g. Dexter Santiago was
-      // previously wrongly seeded as COMMS_MEDIA's COS1 too).
-      await prisma.approverAssignment.deleteMany({ where: { role: "COS1", ministryType } });
-    }
+    // COS1 used to also be auto-assigned to this same person -- no longer:
+    // COS1/COS2 are claimable positions (approval-data.ts resolves who's
+    // eligible directly from approval-routing.ts's COS_POOL, not from this
+    // table). Remove any stale row left over from an earlier correction.
+    await prisma.approverAssignment.deleteMany({ where: { role: "COS1", ministryType } });
   }
+  // COS1/COS2 are never assigned here at all (org-wide or per-ministry) --
+  // remove any stale org-wide rows left over from a brief earlier attempt
+  // to pre-seed them (which also briefly had a COS3).
+  await prisma.approverAssignment.deleteMany({ where: { role: { in: ["COS1", "COS2"] }, ministryType: null } });
 
   // upsert's compound-unique `where` can't express ministryType: null (the
   // generated type requires a real MinistryType there even though the
-  // column allows null) -- findFirst + create/update instead for these two
+  // column allows null) -- findFirst + create/update instead for these
   // org-wide rows.
   await upsertOrgWideAssignment("FINANCE_OVERSEER", users.joel.id);
   await upsertOrgWideAssignment("REGIONAL_DIRECTOR", users.ryan.id);
 
   console.log(
-    "Seeded approvers: 9 users, 20 ApproverAssignment rows (12 Ministry Overseer, 6 COS1, 2 org-wide).",
+    `Seeded approvers: 9 users, 14 ApproverAssignment rows (12 Ministry Overseer, 2 org-wide). ${COS_POOL.length} COS pool members are resolved directly by email, not seeded here.`,
   );
   return users;
 }
@@ -175,7 +156,7 @@ async function seedDemoRequest(users: Record<NamedUserKey, { id: string }>) {
           },
           {
             role: "COS1",
-            approverUserId: users.dexter.id,
+            approverUserId: users.ross.id,
             status: "APPROVED",
             decidedAt: new Date("2026-08-19"),
           },
