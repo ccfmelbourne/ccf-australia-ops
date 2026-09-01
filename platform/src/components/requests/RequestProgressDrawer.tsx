@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { requestOverrideAction } from "@/app/requests/actions";
 import { REQUEST_TYPE_LABELS, MINISTRY_TYPE_LABELS, REQUEST_STATUS_LABELS } from "@/lib/request-types";
-import { APPROVER_ROLE_LABELS } from "@/lib/approval-routing";
+import { getApproverRoleLabel } from "@/lib/approval-routing";
 import { ErrorBanner } from "@/components/ErrorBanner";
 import type { RequestProgressView } from "@/lib/request-data";
 
@@ -151,7 +151,7 @@ export function RequestProgressDrawer({
           <ul className="text-sm">
             {data.approvals.map((a, i) => (
               <li key={i} className="flex justify-between border-b border-slate-100 py-1">
-                <span>{APPROVER_ROLE_LABELS[a.role]}</span>
+                <span>{getApproverRoleLabel(a.role, data.ministryType)}</span>
                 <span className="text-slate-600">
                   {a.status === "APPROVED"
                     ? `Approved${a.approverName ? ` — ${a.approverName}` : ""}`

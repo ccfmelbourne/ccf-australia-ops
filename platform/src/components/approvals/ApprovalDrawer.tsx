@@ -6,7 +6,7 @@ import SignatureCanvas from "react-signature-canvas";
 import { ErrorBanner } from "@/components/ErrorBanner";
 import { decideApprovalAction, requestChangesAction } from "@/app/approvals/actions";
 import { REQUEST_TYPE_LABELS, MINISTRY_TYPE_LABELS } from "@/lib/request-types";
-import { APPROVER_ROLE_LABELS } from "@/lib/approval-routing";
+import { getApproverRoleLabel } from "@/lib/approval-routing";
 import type { PendingApprovalView } from "@/lib/approval-data";
 
 // Same native-<dialog> side-panel pattern as RequestDrawer.tsx -- gives a
@@ -111,7 +111,7 @@ export function ApprovalDrawer({
           <dt className="text-slate-500">Ministry</dt>
           <dd>{MINISTRY_TYPE_LABELS[approval.ministryType]}</dd>
           <dt className="text-slate-500">Your role</dt>
-          <dd>{APPROVER_ROLE_LABELS[approval.role as keyof typeof APPROVER_ROLE_LABELS] ?? approval.role}</dd>
+          <dd>{getApproverRoleLabel(approval.role, approval.ministryType)}</dd>
           <dt className="text-slate-500">Total</dt>
           <dd className="font-mono font-semibold">${approval.totalAmount}</dd>
         </dl>

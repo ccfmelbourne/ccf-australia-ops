@@ -6,6 +6,8 @@
 // emails, and several role slots have no named person at all), so
 // RequiredApproval rows are created with approverUserId left null.
 
+import type { MinistryTypeValue } from "@/lib/request-types";
+
 export const APPROVER_ROLES = [
   "MINISTRY_OVERSEER",
   "COS1",
@@ -22,6 +24,21 @@ export const APPROVER_ROLE_LABELS: Record<ApproverRoleValue, string> = {
   FINANCE_OVERSEER: "Finance Overseer",
   REGIONAL_DIRECTOR: "Regional Director",
 };
+
+// Oceania Regional's Ministry Overseer (Ptr. Ryan Escobar) is displayed as
+// "Regional Director" there rather than "Ministry Overseer" -- confirmed
+// with the decision-maker (2026-09-01), who wanted one consistent title
+// for him rather than two ("Regional Coordinator" for the ministry-level
+// role vs. "Regional Director" for the org-wide tier-4 role). Functionally
+// he's still the MINISTRY_OVERSEER role (same approval semantics, same
+// tier rules); only the display label differs for this one ministry, so
+// this stays a label override rather than a new ApproverRole.
+export function getApproverRoleLabel(role: string, ministryType: MinistryTypeValue): string {
+  if (role === "MINISTRY_OVERSEER" && ministryType === "OCEANIA_REGIONAL") {
+    return "Regional Director";
+  }
+  return APPROVER_ROLE_LABELS[role as ApproverRoleValue] ?? role;
+}
 
 export type ApprovalTier = 1 | 2 | 3 | 4;
 

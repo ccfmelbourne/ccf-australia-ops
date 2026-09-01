@@ -25,6 +25,9 @@ export const REQUEST_TYPE_LABELS: Record<RequestTypeValue, string> = {
 // Split COMMS_MEDIA_DGM into COMMS_MEDIA + DGM (2026-08-31): confirmed each
 // ministry type is assigned its own named approver individually, and these
 // two have different people (Dexter Santiago vs. Moriz Manlangit).
+// Split EVENTS_HOST into EVENTS_RETREAT + HOST (2026-09-01): same
+// reasoning -- Eland Afuang vs. Lawrence Hernando. Also fixed the
+// OCEANA_REGIONAL -> OCEANIA_REGIONAL spelling.
 export const MINISTRY_TYPES = [
   "ADMIN",
   "EXALT_LIVE_PROD",
@@ -33,10 +36,11 @@ export const MINISTRY_TYPES = [
   "PASTORAL_CARE",
   "B1G",
   "ELEVATE",
-  "EVENTS_HOST",
+  "EVENTS_RETREAT",
+  "HOST",
   "COMMS_MEDIA",
   "DGM",
-  "OCEANA_REGIONAL",
+  "OCEANIA_REGIONAL",
 ] as const;
 export type MinistryTypeValue = (typeof MINISTRY_TYPES)[number];
 
@@ -48,10 +52,11 @@ export const MINISTRY_TYPE_LABELS: Record<MinistryTypeValue, string> = {
   PASTORAL_CARE: "Pastoral Care",
   B1G: "B1G",
   ELEVATE: "Elevate",
-  EVENTS_HOST: "Events / Host",
+  EVENTS_RETREAT: "Events / Retreat",
+  HOST: "Host",
   COMMS_MEDIA: "Comms / Media",
   DGM: "DGM",
-  OCEANA_REGIONAL: "Oceana Regional",
+  OCEANIA_REGIONAL: "Oceania Regional",
 };
 
 // Mirrors the RequestStatus enum (schema.prisma). Only DRAFT, IN_APPROVAL,
