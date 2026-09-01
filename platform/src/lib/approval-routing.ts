@@ -33,12 +33,29 @@ export function getTier(totalAmount: number): ApprovalTier {
   return 4;
 }
 
+// The three fixed committee members for the tier-4 Regional Director
+// override (specs/0001, confirmed with leadership) -- a specific named
+// committee, not "any 3 COS": confirmed against the live ApproverAssignment
+// data that Vamie Pinlac isn't even the currently-assigned COS1/Overseer
+// for any ministry today, so this can't be resolved through
+// ApproverAssignment the way other roles are. Hardcoded by email (matching
+// prisma/seed.ts's NAMED_USERS, where these three are seeded regardless of
+// their current per-ministry assignment) and resolved to User rows by
+// whoever calls requestOverride/overrideApprove (approval-data.ts).
+export const REGIONAL_DIRECTOR_OVERRIDE_COMMITTEE_EMAILS = [
+  "rosscallado@gmail.com",
+  "joel.jmj@gmail.com",
+  "vamiebpinlac@gmail.com",
+] as const;
+
 // The confirmed rule -- not the pilot's outdated one, which gated the
 // Regional Director requirement to the Oceana ministry group only. Here
 // tier 4 always requires the Regional Director, for every group; the
-// alternative unanimous-3-named-COS override path is a separate, later
-// roadmap item (RegionalDirectorOverride/OverrideApproval), not decided by
-// this function.
+// alternative unanimous-3-named-COS override
+// (REGIONAL_DIRECTOR_OVERRIDE_COMMITTEE_EMAILS above) is handled separately
+// by approval-data.ts's requestOverride/overrideApprove, not by this
+// function -- a tier-4 request's RequiredApproval rows always include
+// REGIONAL_DIRECTOR regardless of whether an override is ever pursued.
 export function getRequiredApproverRoles(tier: ApprovalTier): ApproverRoleValue[] {
   switch (tier) {
     case 1:

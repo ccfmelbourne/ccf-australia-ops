@@ -25,6 +25,7 @@ const baseDetail: ApprovedRequestDetail = {
     },
   ],
   approverDirectory: [{ ministryType: "ADMIN", overseerName: "Approver One" }],
+  override: null,
 };
 
 test("buildApprovedRequestEmail includes the voucher number, requester, and total", () => {

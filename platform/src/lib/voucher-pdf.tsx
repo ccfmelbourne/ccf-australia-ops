@@ -112,6 +112,8 @@ const styles = StyleSheet.create({
   approvalDate: { fontSize: 7, color: "#666666" },
 
   legendLine: { fontSize: 8, marginBottom: 2 },
+  overrideNameCell: { flex: 2 },
+  overrideDateCell: { flex: 1, textAlign: "right" },
 
   directoryGrid: { flexDirection: "row", flexWrap: "wrap" },
   directoryCard: {
@@ -232,6 +234,13 @@ export function VoucherDocument({
           <View style={styles.approvalRow} wrap={false}>
             {detail.approvals.map((a, i) => {
               const signature = signaturesByRole.get(a.role);
+              // A request approved via the committee override (see the
+              // section below) never gets a direct Regional Director
+              // decision -- that row stays genuinely PENDING/unsigned
+              // forever, which is correct data, not a bug. Represent it
+              // accurately here instead of showing a misleadingly-blank
+              // column on an otherwise fully approved voucher.
+              const waivedByOverride = a.role === "REGIONAL_DIRECTOR" && detail.override !== null;
               return (
                 <View style={styles.approvalCol} key={i}>
                   <Text style={styles.approvalRoleLabel}>{APPROVER_ROLE_LABELS[a.role]}</Text>
@@ -239,15 +248,41 @@ export function VoucherDocument({
                     // eslint-disable-next-line jsx-a11y/alt-text -- this is @react-pdf/renderer's PDF-drawing Image, not an HTML <img>; it has no alt prop
                     <Image src={{ data: signature, format: "png" }} style={styles.signatureImage} />
                   ) : (
-                    <Text style={styles.noSignature}>No signature on file</Text>
+                    <Text style={styles.noSignature}>
+                      {waivedByOverride ? "Waived — Committee Override" : "No signature on file"}
+                    </Text>
                   )}
-                  <Text style={styles.approvalName}>{a.approverName ?? "—"}</Text>
-                  <Text style={styles.approvalDate}>{formatDecidedAt(a.decidedAt)}</Text>
+                  <Text style={styles.approvalName}>
+                    {waivedByOverride ? "See below" : (a.approverName ?? "—")}
+                  </Text>
+                  <Text style={styles.approvalDate}>
+                    {waivedByOverride ? "" : formatDecidedAt(a.decidedAt)}
+                  </Text>
                 </View>
               );
             })}
           </View>
         </View>
+
+        {detail.override && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Regional Director Override — Committee Approval</Text>
+            <Text style={styles.legendLine}>
+              Unanimous approval from all three named committee members, confirming the expense
+              is within the approved budget plan, in place of direct Regional Director approval.
+            </Text>
+            <View style={styles.tableHeaderRow}>
+              <Text style={[styles.tableHeaderCell, styles.overrideNameCell]}>Committee Member</Text>
+              <Text style={[styles.tableHeaderCell, styles.overrideDateCell]}>Decided</Text>
+            </View>
+            {detail.override.committee.map((c, i) => (
+              <View style={styles.row} key={i}>
+                <Text style={styles.overrideNameCell}>{c.approverName}</Text>
+                <Text style={styles.overrideDateCell}>{formatDecidedAt(c.decidedAt)}</Text>
+              </View>
+            ))}
+          </View>
+        )}
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Approval Limit</Text>

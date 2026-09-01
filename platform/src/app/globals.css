@@ -1,8 +1,20 @@
 @import "tailwindcss";
 
+/* This app is built light-theme only -- every component uses fixed
+   Tailwind colors (bg-white, text-slate-900, etc.) with no dark: variants
+   anywhere. The default Next.js starter's dark-mode block (flipping these
+   two variables under prefers-color-scheme: dark) was left over from
+   scaffolding and never matched that -- on a device/browser that honors
+   dark mode (confirmed: iPhone Chrome), elements without their own
+   explicit Tailwind text color inherited the flipped-to-white foreground
+   while explicitly-styled light cards/tables stayed light, producing
+   invisible white-on-white text. color-scheme: light tells the browser
+   this page is deliberately light-only, so it won't try to auto-dark/
+   invert anything regardless of device/browser dark-mode settings. */
 :root {
   --background: #ffffff;
   --foreground: #171717;
+  color-scheme: light;
 }
 
 @theme inline {
@@ -10,13 +22,6 @@
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
 }
 
 body {
