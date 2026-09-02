@@ -235,6 +235,7 @@ export function VoucherDocument({
           <View style={styles.twoCol}>
             <View style={styles.mainCol}>
               <Text style={styles.sectionTitle}>Description / Receipts Attached</Text>
+              <Text style={styles.cashAdvanceNote}>Note: One ministry per voucher only.</Text>
               <View style={styles.tableHeaderRow}>
                 <Text style={[styles.tableHeaderCell, styles.descCell]}>Description</Text>
                 <Text style={[styles.tableHeaderCell, styles.amountCell]}>Amount</Text>
@@ -255,7 +256,7 @@ export function VoucherDocument({
               </View>
             </View>
             <View style={styles.sideCol}>
-              <Text style={styles.sectionTitle}>Ministry (one per voucher)</Text>
+              <Text style={styles.sectionTitle}>Ministry</Text>
               {Object.entries(MINISTRY_TYPE_LABELS).map(([mt, label]) => (
                 <Checkbox key={mt} checked={mt === detail.ministryType} label={label} />
               ))}
@@ -271,13 +272,13 @@ export function VoucherDocument({
                 For Cash Advances (CA), the requisitioner agrees to liquidate the CA, with
                 relevant invoices, not later than one (1) month from the date of this voucher.
               </Text>
-              <Text style={styles.fieldValue}>{detail.requesterName}</Text>
               {requesterSignature ? (
                 // eslint-disable-next-line jsx-a11y/alt-text -- this is @react-pdf/renderer's PDF-drawing Image, not an HTML <img>; it has no alt prop
                 <Image src={{ data: requesterSignature, format: "png" }} style={styles.signatureImage} />
               ) : (
                 <Text style={styles.noSignature}>No signature on file</Text>
               )}
+              <Text style={styles.fieldValue}>{detail.requesterName}</Text>
             </View>
             <View style={styles.sideCol}>
               <Text style={styles.sectionTitle}>Bank Details for Payment</Text>

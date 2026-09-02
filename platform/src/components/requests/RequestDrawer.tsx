@@ -21,7 +21,6 @@ import { ReceiptManager } from "./ReceiptManager";
 import { BankDetailsManager } from "./BankDetailsManager";
 import { ErrorBanner } from "@/components/ErrorBanner";
 import { RequestStatusBadge } from "@/components/RequestStatusBadge";
-import { Skeleton } from "@/components/Skeleton";
 import { WizardSteps } from "./WizardSteps";
 import type { WizardStep } from "./WizardSteps";
 import { ReviewStep } from "./ReviewStep";
@@ -210,28 +209,33 @@ export function RequestDrawer(props: RequestDrawerProps) {
 // round-trip created a render where neither this "creating" step nor the
 // eventual edit view was mounted, which visibly closed and reopened the
 // dialog -- found via live testing.
+// Requires an explicit request-type and ministry pick before the draft is
+// even created -- no request exists yet at this point, so there's nothing
+// to default to that wouldn't just be an arbitrary "first in the list"
+// guess the requester has to notice and override (confirmed with the
+// decision-maker after a live report that every new request looked like
+// it was auto-selecting "Cash Advance"/"Admin", since that's genuinely
+// what it always defaulted to). The draft is only created -- with the
+// requester's own chosen values -- once they click Continue.
 function CreateStep({ onCreated }: { onCreated: (data: DraftRequestView) => void }) {
-  const startedRef = useRef(false);
+  const [requestType, setRequestType] = useState<RequestTypeValue | "">("");
+  const [ministryType, setMinistryType] = useState<MinistryTypeValue | "">("");
+  const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (startedRef.current) return;
-    startedRef.current = true;
-    (async () => {
-      // Belt-and-suspenders alongside the action's own try/catch -- a
-      // transport-level failure calling the action at all (not just a
-      // failure inside it) would otherwise reject this promise with
-      // nothing here to catch it, leaving the skeleton showing forever
-      // instead of an actual error the requester can see.
+  function handleContinue() {
+    if (!requestType || !ministryType) return;
+    setError(null);
+    startTransition(async () => {
       try {
-        const result = await createDraftRequestForDrawerAction(REQUEST_TYPES[0], MINISTRY_TYPES[0]);
+        const result = await createDraftRequestForDrawerAction(requestType, ministryType);
         if (result.ok && result.id && result.voucherNo && result.requesterName) {
           onCreated({
             id: result.id,
             voucherNo: result.voucherNo,
             requesterName: result.requesterName,
-            requestType: REQUEST_TYPES[0],
-            ministryType: MINISTRY_TYPES[0],
+            requestType,
+            ministryType,
             totalAmount: "0.00",
             lineItems: [],
             receipts: [],
@@ -244,34 +248,64 @@ function CreateStep({ onCreated }: { onCreated: (data: DraftRequestView) => void
       } catch (err) {
         setError(err instanceof Error ? err.message : "Something went wrong.");
       }
-    })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    });
+  }
 
-  // Shaped like the wizard's step 1 (WizardSteps pills + the two
-  // RequestDetailsFields selects) -- a fresh draft always transitions
-  // straight into that view once created, so the skeleton previews it
-  // instead of a generic spinner.
-  return error ? (
-    <ErrorBanner message={error} />
-  ) : (
+  return (
     <div className="flex flex-col gap-4">
-      <div className="flex gap-2">
-        <Skeleton className="h-6 w-24 rounded-full" />
-        <Skeleton className="h-6 w-32 rounded-full" />
-        <Skeleton className="h-6 w-24 rounded-full" />
-        <Skeleton className="h-6 w-20 rounded-full" />
+      <WizardSteps currentStep={1} furthestStep={1} onJump={() => {}} />
+      <div className="flex flex-col gap-1">
+        <label htmlFor="new-requestType" className="text-sm font-medium text-slate-700">
+          Request type
+        </label>
+        <select
+          id="new-requestType"
+          value={requestType}
+          disabled={isPending}
+          onChange={(e) => setRequestType(e.target.value as RequestTypeValue)}
+          className="rounded-md border border-slate-300 px-3 py-2 text-sm disabled:opacity-60"
+        >
+          <option value="" disabled>
+            Select a request type…
+          </option>
+          {SORTED_REQUEST_TYPES.map((t) => (
+            <option key={t} value={t}>
+              {REQUEST_TYPE_LABELS[t]}
+            </option>
+          ))}
+        </select>
       </div>
       <div className="flex flex-col gap-1">
-        <Skeleton className="h-3 w-24" />
-        <Skeleton className="h-9 w-full" />
+        <label htmlFor="new-ministryType" className="text-sm font-medium text-slate-700">
+          Ministry
+        </label>
+        <select
+          id="new-ministryType"
+          value={ministryType}
+          disabled={isPending}
+          onChange={(e) => setMinistryType(e.target.value as MinistryTypeValue)}
+          className="rounded-md border border-slate-300 px-3 py-2 text-sm disabled:opacity-60"
+        >
+          <option value="" disabled>
+            Select a ministry…
+          </option>
+          {SORTED_MINISTRY_TYPES.map((m) => (
+            <option key={m} value={m}>
+              {MINISTRY_TYPE_LABELS[m]}
+            </option>
+          ))}
+        </select>
       </div>
-      <div className="flex flex-col gap-1">
-        <Skeleton className="h-3 w-20" />
-        <Skeleton className="h-9 w-full" />
-      </div>
+      {error && <ErrorBanner message={error} />}
       <div className="flex justify-end">
-        <Skeleton className="h-9 w-28" />
+        <button
+          type="button"
+          disabled={isPending || !requestType || !ministryType}
+          onClick={handleContinue}
+          className="rounded-md bg-teal-600 px-4 py-2 text-sm font-semibold text-white hover:bg-teal-700 disabled:opacity-60"
+        >
+          {isPending ? "Creating…" : "Continue →"}
+        </button>
       </div>
     </div>
   );
@@ -365,6 +399,22 @@ function RequestDetailsFields({
 // separate (each component already has its own), this only holds the
 // pad's ref.
 function SignaturePad({ sigPadRef }: { sigPadRef: React.RefObject<SignatureCanvas | null> }) {
+  useEffect(() => {
+    // react-signature-canvas sizes its underlying canvas from the
+    // container's rendered dimensions at mount time, and only recalculates
+    // on a window "resize" event. If it mounts before the enclosing native
+    // <dialog>'s showModal() layout has fully settled, it can capture the
+    // wrong size -- a real, live-reported crash (InvalidStateError from
+    // getTrimmedCanvas on a 0-sized canvas) traced to exactly this:
+    // EditContent renders this pad immediately when the dialog opens,
+    // unlike CreateWizard's copy, which only appears at the Review step,
+    // well after the dialog has settled. Dispatching a synthetic resize
+    // shortly after mount is the standard workaround for this library --
+    // it forces a recalculation once the dialog's real layout is in place.
+    const id = requestAnimationFrame(() => window.dispatchEvent(new Event("resize")));
+    return () => cancelAnimationFrame(id);
+  }, []);
+
   return (
     <div className="flex flex-col gap-1">
       <div className="flex items-center justify-between">
@@ -472,10 +522,24 @@ function EditContent({ data, onClose }: { data: DraftRequestView; onClose: () =>
   }
 
   function handleConfirmedSubmit() {
-    // Signature was already validated non-empty in handleSubmitClick, and
-    // the canvas hasn't been touched since (the confirm dialog has no
-    // "back to edit" path that would let it change) -- safe to read again.
-    const signatureDataUrl = sigPadRef.current!.getTrimmedCanvas().toDataURL("image/png");
+    // handleSubmitClick already checked isEmpty() before showing this
+    // confirm dialog, but that check and this read can still disagree --
+    // isEmpty() only inspects the recorded stroke points, while
+    // getTrimmedCanvas() also needs the canvas's actual pixel dimensions to
+    // be valid at the moment it's called, and those two can fall out of
+    // sync (found live: a real InvalidStateError from a 0-sized canvas
+    // here despite passing the earlier isEmpty() check). Never let that
+    // reach the user as an uncaught exception -- fail back to the same
+    // "please sign" state they'd have seen if the first check had caught it.
+    let signatureDataUrl: string;
+    try {
+      if (!sigPadRef.current || sigPadRef.current.isEmpty()) throw new Error("empty");
+      signatureDataUrl = sigPadRef.current.getTrimmedCanvas().toDataURL("image/png");
+    } catch {
+      setShowConfirm(false);
+      setSubmitError("Your signature didn't save correctly -- please sign again and resubmit.");
+      return;
+    }
     startSubmitTransition(async () => {
       const result = await submitRequestAction(data.id, signatureDataUrl);
       if (result.ok) {
@@ -597,10 +661,18 @@ function CreateWizard({ data, onClose }: { data: DraftRequestView; onClose: () =
   }
 
   function handleConfirmedSubmit() {
-    // Signature was already validated non-empty in handleSubmitClick, and
-    // the confirm dialog has no path back to the canvas that would let it
-    // change -- safe to read again.
-    const signatureDataUrl = sigPadRef.current!.getTrimmedCanvas().toDataURL("image/png");
+    // See EditContent's handleConfirmedSubmit for why this is re-checked
+    // and wrapped in a try/catch rather than trusting handleSubmitClick's
+    // earlier isEmpty() check alone.
+    let signatureDataUrl: string;
+    try {
+      if (!sigPadRef.current || sigPadRef.current.isEmpty()) throw new Error("empty");
+      signatureDataUrl = sigPadRef.current.getTrimmedCanvas().toDataURL("image/png");
+    } catch {
+      setShowConfirm(false);
+      setSubmitError("Your signature didn't save correctly -- please sign again and resubmit.");
+      return;
+    }
     startSubmitTransition(async () => {
       const result = await submitRequestAction(data.id, signatureDataUrl);
       if (result.ok) {
