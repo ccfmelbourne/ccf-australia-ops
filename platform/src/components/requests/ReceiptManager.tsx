@@ -4,6 +4,7 @@ import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { uploadAndScanReceiptAction, removeReceiptAction } from "@/app/requests/actions";
 import { ErrorBanner } from "@/components/ErrorBanner";
+import { SectionHeading } from "@/components/SectionHeading";
 import { ReceiptProcessingCard, ReceiptCard } from "./ReceiptCard";
 import type { DraftReceiptView } from "@/lib/request-data";
 
@@ -99,7 +100,7 @@ export function ReceiptManager({
   return (
     <section className="flex flex-col gap-3">
       <div>
-        <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Receipts</h2>
+        <SectionHeading>Receipts</SectionHeading>
         <p className="mt-1 text-sm text-slate-600">Upload your official receipts</p>
         <p className="text-xs text-slate-500">PDF, JPEG, PNG, or HEIC · Maximum 10 MB each</p>
       </div>

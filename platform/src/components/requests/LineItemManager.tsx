@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { addLineItemAction, removeLineItemAction } from "@/app/requests/actions";
 import { ErrorBanner } from "@/components/ErrorBanner";
+import { SectionHeading } from "@/components/SectionHeading";
 import type { DraftLineItemView } from "@/lib/request-data";
 
 export function LineItemManager({
@@ -51,9 +52,7 @@ export function LineItemManager({
   return (
     <div className="flex flex-col gap-6">
       <section>
-        <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
-          Line items
-        </h2>
+        <SectionHeading>Line items</SectionHeading>
         {lineItems.length === 0 ? (
           <p className="text-sm text-slate-500">No line items yet.</p>
         ) : (
@@ -88,9 +87,7 @@ export function LineItemManager({
       </section>
 
       <section>
-        <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
-          Add a line item
-        </h2>
+        <SectionHeading>Add a line item</SectionHeading>
         <form
           onSubmit={handleAdd}
           className="flex flex-col gap-3 rounded-md border border-slate-200 p-4"

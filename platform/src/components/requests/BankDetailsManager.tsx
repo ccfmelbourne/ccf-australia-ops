@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { saveBankDetailsAction } from "@/app/requests/actions";
 import { ErrorBanner } from "@/components/ErrorBanner";
+import { SectionHeading } from "@/components/SectionHeading";
 import type { DraftBankDetailsView } from "@/lib/request-data";
 
 export function BankDetailsManager({
@@ -44,9 +45,7 @@ export function BankDetailsManager({
 
   return (
     <section>
-      <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
-        Bank details for payment
-      </h2>
+      <SectionHeading>Bank details for payment</SectionHeading>
       <form
         onSubmit={handleSave}
         className="flex flex-col gap-3 rounded-md border border-slate-200 p-4"

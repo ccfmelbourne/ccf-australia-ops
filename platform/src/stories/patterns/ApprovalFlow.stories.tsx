@@ -26,7 +26,7 @@ function ApprovalFlowSimulator() {
   if (decided) {
     return (
       <p className="max-w-xl rounded-md border border-teal-200 bg-teal-50 p-3 text-sm font-semibold text-teal-800">
-        Approved -- DV-2026-0124 moves on to Finance Overseer.
+        Approved -- CCF-20260902-0124 moves on to Finance Overseer.
       </p>
     );
   }
@@ -44,7 +44,7 @@ function ApprovalFlowSimulator() {
             >
               <span className="flex flex-col gap-1">
                 <span className="flex items-center gap-2">
-                  <span className="font-mono text-sm text-slate-700">DV-2026-0124</span>
+                  <span className="font-mono text-sm text-slate-700">CCF-20260902-0124</span>
                   <RequestStatusBadge status="IN_APPROVAL" />
                 </span>
                 <span className="text-xs text-slate-500">Jane Smith · Reimbursement · Pastoral Care</span>
@@ -61,7 +61,7 @@ function ApprovalFlowSimulator() {
     <div className="flex max-w-xl flex-col gap-6">
       <div className="flex items-center justify-between border-b border-slate-200 pb-4">
         <span className="flex items-center gap-2">
-          <h2 className="text-lg font-bold text-slate-900">DV-2026-0124</h2>
+          <h2 className="text-lg font-bold text-slate-900">CCF-20260902-0124</h2>
           <RequestStatusBadge status="IN_APPROVAL" />
         </span>
       </div>
@@ -123,7 +123,7 @@ export const FullApprovalFlow: Story = {
   render: () => <ApprovalFlowSimulator />,
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    await userEvent.click(canvas.getByRole("button", { name: /DV-2026-0124/ }));
+    await userEvent.click(canvas.getByRole("button", { name: /CCF-20260902-0124/ }));
     await userEvent.click(canvas.getByRole("button", { name: "Simulate signature" }));
     await userEvent.click(canvas.getByRole("button", { name: "Approve" }));
   },

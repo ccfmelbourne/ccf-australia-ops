@@ -479,13 +479,21 @@ function EditContent({ data, onClose }: { data: DraftRequestView; onClose: () =>
 
       <RequestDetailsFields requestId={data.id} requestType={data.requestType} ministryType={data.ministryType} />
 
-      <LineItemManager
-        requestId={data.id}
-        lineItems={data.lineItems}
-        totalAmount={data.totalAmount}
-      />
-      <ReceiptManager requestId={data.id} receipts={data.receipts} />
-      <BankDetailsManager requestId={data.id} bankDetails={data.bankDetails} />
+      <div className="flex flex-col divide-y divide-slate-200">
+        <div className="pb-6">
+          <LineItemManager
+            requestId={data.id}
+            lineItems={data.lineItems}
+            totalAmount={data.totalAmount}
+          />
+        </div>
+        <div className="py-6">
+          <ReceiptManager requestId={data.id} receipts={data.receipts} />
+        </div>
+        <div className="pt-6">
+          <BankDetailsManager requestId={data.id} bankDetails={data.bankDetails} />
+        </div>
+      </div>
 
       <div className="flex flex-col gap-3 border-t border-slate-200 pt-4">
         <SignaturePad sigPadRef={sigPadRef} />
@@ -628,8 +636,14 @@ function CreateWizard({ data, onClose }: { data: DraftRequestView; onClose: () =
 
       {currentStep === 2 && (
         <>
-          <ReceiptManager requestId={data.id} receipts={data.receipts} />
-          <LineItemManager requestId={data.id} lineItems={data.lineItems} totalAmount={data.totalAmount} />
+          <div className="flex flex-col divide-y divide-slate-200">
+            <div className="pb-6">
+              <ReceiptManager requestId={data.id} receipts={data.receipts} />
+            </div>
+            <div className="pt-6">
+              <LineItemManager requestId={data.id} lineItems={data.lineItems} totalAmount={data.totalAmount} />
+            </div>
+          </div>
           <div className="flex flex-col gap-2">
             <div className="flex justify-between">
               {backButton}

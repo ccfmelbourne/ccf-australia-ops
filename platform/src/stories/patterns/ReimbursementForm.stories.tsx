@@ -92,7 +92,7 @@ function ReimbursementFlowSimulator({ endingVariant }: { endingVariant: "general
 
   const reviewData: DraftRequestView = {
     id: "story-fixture",
-    voucherNo: "DV-2026-0123",
+    voucherNo: "CCF-20260902-0123",
     requesterName: endingVariant === "ministryOverseer" ? "Dexter Santiago" : "Jane Smith",
     requestType: "CASH_ADVANCE",
     ministryType: endingVariant === "ministryOverseer" ? "COMMS_MEDIA" : "PASTORAL_CARE",
