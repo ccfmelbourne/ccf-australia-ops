@@ -145,7 +145,7 @@ export function RequestsTable({
                               type="button"
                               disabled={isPending}
                               onClick={() => handleDelete(r.id)}
-                              className="font-semibold text-red-600 hover:underline disabled:opacity-60"
+                              className="-m-1 p-1 font-semibold text-red-600 hover:underline disabled:opacity-60"
                             >
                               {isPending ? "Deleting…" : "Yes, delete"}
                             </button>
@@ -153,7 +153,7 @@ export function RequestsTable({
                               type="button"
                               disabled={isPending}
                               onClick={() => setConfirmDeleteId(null)}
-                              className="text-slate-600 hover:underline disabled:opacity-60"
+                              className="-m-1 p-1 text-slate-600 hover:underline disabled:opacity-60"
                             >
                               Cancel
                             </button>
@@ -163,14 +163,14 @@ export function RequestsTable({
                             <button
                               type="button"
                               onClick={() => openEdit(r.id)}
-                              className="text-teal-700 hover:underline"
+                              className="-m-1 p-1 text-teal-700 hover:underline"
                             >
                               Edit
                             </button>
                             <button
                               type="button"
                               onClick={() => setConfirmDeleteId(r.id)}
-                              className="text-red-600 hover:underline"
+                              className="-m-1 p-1 text-red-600 hover:underline"
                             >
                               Delete
                             </button>
@@ -182,7 +182,7 @@ export function RequestsTable({
                       <button
                         type="button"
                         onClick={() => openProgress(r.id)}
-                        className="text-teal-700 hover:underline"
+                        className="-m-1 p-1 text-teal-700 hover:underline"
                       >
                         View
                       </button>

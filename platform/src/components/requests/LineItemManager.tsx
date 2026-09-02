@@ -69,7 +69,7 @@ export function LineItemManager({
                         type="button"
                         disabled={isPending}
                         onClick={() => handleRemove(li.id)}
-                        className="text-xs text-red-600 hover:underline disabled:opacity-60"
+                        className="-m-1 p-1 text-xs text-red-600 hover:underline disabled:opacity-60"
                       >
                         Remove
                       </button>
