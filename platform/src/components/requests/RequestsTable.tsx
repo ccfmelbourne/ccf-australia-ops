@@ -6,6 +6,7 @@ import { deleteRequestAction } from "@/app/requests/actions";
 import { REQUEST_TYPE_LABELS, MINISTRY_TYPE_LABELS } from "@/lib/request-types";
 import { ErrorBanner } from "@/components/ErrorBanner";
 import { RequestStatusBadge } from "@/components/RequestStatusBadge";
+import { EmptyState } from "@/components/EmptyState";
 import { RequestDrawer } from "./RequestDrawer";
 import { RequestProgressDrawer } from "./RequestProgressDrawer";
 import type { RequestListItemView, DraftRequestView, RequestProgressView } from "@/lib/request-data";
@@ -106,7 +107,7 @@ export function RequestsTable({
       {error && <ErrorBanner message={error} />}
 
       {requests.length === 0 ? (
-        <p className="text-sm text-slate-500">No requests yet.</p>
+        <EmptyState message="No requests yet." />
       ) : (
         // Six columns don't reflow on a narrow phone screen -- scrolls
         // horizontally inside its own container instead of squishing text

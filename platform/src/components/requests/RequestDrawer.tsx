@@ -21,19 +21,11 @@ import { ReceiptManager } from "./ReceiptManager";
 import { BankDetailsManager } from "./BankDetailsManager";
 import { ErrorBanner } from "@/components/ErrorBanner";
 import { RequestStatusBadge } from "@/components/RequestStatusBadge";
-import { MoneyStat } from "@/components/MoneyStat";
 import { Skeleton } from "@/components/Skeleton";
-import { getTier, getRequiredApproverRoles } from "@/lib/approval-routing";
+import { WizardSteps } from "./WizardSteps";
+import type { WizardStep } from "./WizardSteps";
+import { ReviewStep } from "./ReviewStep";
 import type { DraftRequestView } from "@/lib/request-data";
-
-// Masks all but the last 4 digits -- the review step's job here is to give
-// the requester confidence they're about to submit the right thing, not to
-// re-display sensitive account details in full a second time right before
-// submission.
-function maskAccountNumber(accountNumber: string): string {
-  const last4 = accountNumber.slice(-4);
-  return "•".repeat(Math.max(accountNumber.length - 4, 0)) + " " + last4;
-}
 
 // Mirrors submitRequest's own preconditions (request-data.ts), in the same
 // order, so a blocking problem surfaces as an inline error right when
@@ -511,117 +503,11 @@ function EditContent({ data, onClose }: { data: DraftRequestView; onClose: () =>
   );
 }
 
-type WizardStep = 1 | 2 | 3 | 4;
-
-const WIZARD_STEP_LABELS: Record<WizardStep, string> = {
-  1: "Details",
-  2: "Expenses & Receipts",
-  3: "Payment",
-  4: "Review",
-};
-
-// Step pills jump back freely but never ahead of furthestStep -- reaching
-// a step earns it, it's not a free-form tab bar.
-function WizardSteps({
-  currentStep,
-  furthestStep,
-  onJump,
-}: {
-  currentStep: WizardStep;
-  furthestStep: WizardStep;
-  onJump: (step: WizardStep) => void;
-}) {
-  const steps: WizardStep[] = [1, 2, 3, 4];
-  return (
-    <div className="flex flex-wrap items-center gap-x-1 gap-y-2 text-xs">
-      {steps.map((step, i) => (
-        <div key={step} className="flex items-center gap-1">
-          <button
-            type="button"
-            disabled={step > furthestStep}
-            onClick={() => onJump(step)}
-            className={`flex items-center gap-1.5 rounded-full py-1 pl-1 pr-2 font-semibold disabled:cursor-not-allowed ${
-              step === currentStep
-                ? "bg-teal-600 text-white"
-                : step < furthestStep
-                  ? "text-teal-700 hover:bg-teal-50"
-                  : "text-slate-500"
-            }`}
-          >
-            <span
-              className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full ${
-                step === currentStep
-                  ? "bg-white text-teal-600"
-                  : step <= furthestStep
-                    ? "bg-teal-100 text-teal-700"
-                    : "bg-slate-100 text-slate-500"
-              }`}
-            >
-              {step}
-            </span>
-            {WIZARD_STEP_LABELS[step]}
-          </button>
-          {i < steps.length - 1 && <span className="h-px w-3 shrink-0 bg-slate-300" />}
-        </div>
-      ))}
-    </div>
-  );
-}
-
-// A confidence-building summary rather than a re-display of every detail
-// already confirmed in the earlier steps -- counts for expenses/receipts
-// and a masked account number, not the full line-item/receipt lists again.
-// The wizard's own line-item and receipt managers (steps 2-3) are where
-// something wrong actually gets fixed; this step's job is just "does this
-// look right" right before an irreversible submission.
-function ReviewStep({ data }: { data: DraftRequestView }) {
-  const tier = getTier(Number(data.totalAmount.replace(/,/g, "")));
-  const approverCount = getRequiredApproverRoles(tier).length;
-
-  return (
-    <div className="flex flex-col gap-4">
-      <div>
-        <p className="text-base font-bold text-slate-900">Review reimbursement</p>
-        <div className="mt-3 border-t border-slate-200" />
-      </div>
-
-      <MoneyStat label="Total" amount={data.totalAmount} />
-
-      <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-3 text-sm">
-        <dt className="text-slate-500">Requester</dt>
-        <dd className="font-medium text-slate-900">{data.requesterName}</dd>
-        <dt className="text-slate-500">Type</dt>
-        <dd className="font-medium text-slate-900">{REQUEST_TYPE_LABELS[data.requestType]}</dd>
-        <dt className="text-slate-500">Ministry</dt>
-        <dd className="font-medium text-slate-900">{MINISTRY_TYPE_LABELS[data.ministryType]}</dd>
-        <dt className="text-slate-500">Expenses</dt>
-        <dd className="font-medium text-slate-900">
-          {data.lineItems.length} item{data.lineItems.length === 1 ? "" : "s"}
-        </dd>
-        <dt className="text-slate-500">Receipts</dt>
-        <dd className="font-medium text-slate-900">
-          {data.receipts.length > 0
-            ? `${data.receipts.length} attached`
-            : data.requestType === "CASH_ADVANCE"
-              ? "Not required"
-              : "None attached"}
-        </dd>
-        <dt className="text-slate-500">Approval route</dt>
-        <dd className="font-medium text-slate-900">
-          {approverCount} approver{approverCount === 1 ? "" : "s"}
-        </dd>
-        {data.bankDetails && (
-          <>
-            <dt className="text-slate-500">Bank account</dt>
-            <dd className="font-mono font-medium text-slate-900">
-              {maskAccountNumber(data.bankDetails.accountNumber)}
-            </dd>
-          </>
-        )}
-      </dl>
-    </div>
-  );
-}
+// WizardSteps and ReviewStep now live in their own files
+// (WizardSteps.tsx, ReviewStep.tsx) -- pulled out so Storybook can story
+// these pure, presentation-only pieces without also pulling in the
+// Server Action imports (and their Prisma dependency graph) this file
+// carries. CreateWizard below still imports and uses both.
 
 // The step-by-step flow for a fresh draft (RequestDrawer picks this over
 // EditContent when data.returnReason is null -- see the comment there).

@@ -33,7 +33,8 @@ const TIMELINE_ICON_CLASSES: Record<TimelineState, string> = {
 // to the next step, and the actual decision detail (who, when) instead of
 // just a status word. This is the requester's main view of "where is my
 // request," so it's worth more visual weight than a two-column list.
-function ApprovalTimeline({
+// Exported so Storybook can story it directly with fixture approval data.
+export function ApprovalTimeline({
   approvals,
   ministryType,
   regionalDirectorOverrideConfirmedAt,
