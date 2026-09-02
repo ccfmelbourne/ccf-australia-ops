@@ -254,7 +254,15 @@ export function VoucherDocument({
               // represent it accurately here rather than showing a
               // misleadingly-blank column on an otherwise fully approved
               // voucher.
-              const waivedRegionalDirector = a.role === "REGIONAL_DIRECTOR" && a.status !== "APPROVED";
+              const waivedRegionalDirector =
+                a.role === "REGIONAL_DIRECTOR" && a.status === "PENDING";
+              // A requester who's also the designated approver for a tier
+              // has it auto-satisfied at submit time rather than clicking
+              // "Approve" on their own reimbursement (request-data.ts's
+              // submitRequest) -- still has a real decidedAt/approverName
+              // (unlike the waived-Regional-Director case below, which
+              // stays genuinely undecided), just no signature.
+              const autoSatisfied = a.status === "AUTO_SATISFIED";
               return (
                 <View style={styles.approvalCol} key={i}>
                   <Text style={styles.approvalRoleLabel}>{getApproverRoleLabel(a.role, detail.ministryType)}</Text>
@@ -263,11 +271,13 @@ export function VoucherDocument({
                     <Image src={{ data: signature, format: "png" }} style={styles.signatureImage} />
                   ) : (
                     <Text style={styles.noSignature}>
-                      {waivedRegionalDirector
-                        ? detail.regionalDirectorOverrideConfirmedAt
-                          ? `Waived — Ross Callado confirmed within budget on ${formatDecidedAt(detail.regionalDirectorOverrideConfirmedAt)}`
-                          : "Waived"
-                        : "No signature on file"}
+                      {autoSatisfied
+                        ? "Auto-satisfied"
+                        : waivedRegionalDirector
+                          ? detail.regionalDirectorOverrideConfirmedAt
+                            ? `Waived — Ross Callado confirmed within budget on ${formatDecidedAt(detail.regionalDirectorOverrideConfirmedAt)}`
+                            : "Waived"
+                          : "No signature on file"}
                     </Text>
                   )}
                   <Text style={styles.approvalName}>{a.approverName ?? "—"}</Text>

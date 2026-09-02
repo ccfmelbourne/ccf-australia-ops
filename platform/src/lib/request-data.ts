@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { formatAmount } from "@/lib/money";
 import { getReceiptDownloadUrl, deleteReceipt } from "@/lib/receipt-storage";
 import { normalizeBsb, formatBsb, assertValidAccountNumber } from "@/lib/bank-details";
+import { sendApprovedRequestEmail } from "@/lib/notifications";
 import {
   assertValidSignatureImage,
   buildSignatureStorageKey,
@@ -13,6 +14,8 @@ import {
   getRequiredApproverRoles,
   APPROVER_ROLES,
   REGIONAL_DIRECTOR_OVERRIDE_CONFIRMER_EMAIL,
+  COS_POOL,
+  getApproverRoleLabel,
 } from "@/lib/approval-routing";
 import type { ApproverRoleValue, ApprovalTier } from "@/lib/approval-routing";
 import type { RequestTypeValue, MinistryTypeValue } from "@/lib/request-types";
@@ -418,6 +421,88 @@ async function resolveApprover(
   return assignment?.userId ?? null;
 }
 
+async function isCosPoolMember(userId: string): Promise<boolean> {
+  const poolUsers = await prisma.user.findMany({ where: { email: { in: [...COS_POOL] } } });
+  return poolUsers.some((u) => u.id === userId);
+}
+
+// The explicit audit-trail explanation for an AUTO_SATISFIED row --
+// confirmed business rule (2026-09-02): a requester must never perform a
+// manual approval action on their own reimbursement, but where CCF's
+// approval policy explicitly designates them as the required approver for
+// a tier, that tier is satisfied automatically instead, with this comment
+// making clear *why* rather than looking like a real click-through
+// approval. Every other required tier still needs independent approval.
+function autoSatisfyReason(role: ApproverRoleValue, ministryType: MinistryTypeValue): string {
+  if (role === "COS1" || role === "COS2") {
+    return "Auto-satisfied: requester is a member of the COS approval pool.";
+  }
+  return `Auto-satisfied: requester is the designated ${getApproverRoleLabel(role, ministryType)} for this request.`;
+}
+
+// A row satisfies its tier either by a real APPROVED decision or by
+// AUTO_SATISFIED -- the requester themselves held that role, so it was
+// satisfied at submit time instead of asking them to approve their own
+// reimbursement, rather than a genuine independent decision.
+export function isDecided(status: string): boolean {
+  return status === "APPROVED" || status === "AUTO_SATISFIED";
+}
+
+// A tier-4 request's REGIONAL_DIRECTOR row can be satisfied two ways:
+// directly decided, or (as an alternative) the request's
+// regionalDirectorOverrideConfirmedAt being set -- Ross Callado's explicit
+// "within budget" confirmation, gated on COS1+COS2 both already decided
+// (approval-data.ts's confirmRegionalDirectorOverride enforces that
+// precondition before ever setting the timestamp, so it's not re-checked
+// here). Every other role still needs isDecided.
+function isFullyApproved(
+  requiredApprovals: { role: string; status: string }[],
+  regionalDirectorOverrideConfirmedAt: Date | null,
+): boolean {
+  const nonRegional = requiredApprovals.filter((a) => a.role !== "REGIONAL_DIRECTOR");
+  if (!nonRegional.every((a) => isDecided(a.status))) return false;
+  const regional = requiredApprovals.find((a) => a.role === "REGIONAL_DIRECTOR");
+  if (!regional) return true; // tier < 4, no such row exists at all
+  return isDecided(regional.status) || regionalDirectorOverrideConfirmedAt !== null;
+}
+
+// Three places can newly complete a request's approval: a regular
+// decideApproval("APPROVED") call, confirmRegionalDirectorOverride
+// (approval-data.ts), and submitRequest below itself -- a request can
+// complete immediately at submission if every required tier turns out to
+// be AUTO_SATISFIED (e.g. a tier-1 request self-submitted by its own
+// Ministry Overseer, which has no other required role at all). All three
+// call this instead of duplicating the finalize-and-notify logic. Lives
+// here (not approval-data.ts, which also calls it) because submitRequest
+// needs it too, and this is the module both already depend on -- keeps
+// neither file needing to import the other.
+export async function finalizeIfFullyApproved(requestId: string): Promise<void> {
+  const [requiredApprovals, request] = await Promise.all([
+    prisma.requiredApproval.findMany({ where: { reimbursementRequestId: requestId } }),
+    prisma.reimbursementRequest.findUnique({
+      where: { id: requestId },
+      select: { regionalDirectorOverrideConfirmedAt: true },
+    }),
+  ]);
+  if (!request || !isFullyApproved(requiredApprovals, request.regionalDirectorOverrideConfirmedAt)) return;
+
+  await prisma.reimbursementRequest.update({
+    where: { id: requestId },
+    data: { status: "APPROVED" },
+  });
+  // Per ADR 0001, a notification failure must never undo or block the
+  // approval decision it's reporting on -- caught and logged, not
+  // rethrown.
+  try {
+    const detail = await getApprovedRequestDetail(requestId);
+    if (detail) {
+      await sendApprovedRequestEmail(detail);
+    }
+  } catch (err) {
+    console.error("Failed to send approved-request notification:", err);
+  }
+}
+
 // DRAFT -> IN_APPROVAL. Generates one RequiredApproval row per role the
 // confirmed tier rules require (approval-routing.ts), with approverUserId
 // resolved from ApproverAssignment where one exists (left null otherwise --
@@ -498,18 +583,45 @@ export async function submitRequest(
       return existing.approverUserId === approverUserIds[i];
     });
 
+  // Auto-satisfy: a requester must never perform a manual approval action
+  // on their own reimbursement, but where CCF's approval policy explicitly
+  // designates them as the required approver for a tier, that tier is
+  // satisfied automatically instead (confirmed business rule, 2026-09-02).
+  // For a non-claimable role this is a simple identity check against the
+  // resolved approver. COS1/COS2 are a claimable pool, not a single
+  // person -- being a pool member only auto-satisfies *one* of the two
+  // slots a tier-3/4 request needs; the other still requires a genuinely
+  // different, independent pool member (cosAutoSatisfyUsed below ensures
+  // only the first COS role in the array is ever auto-satisfied).
+  const requesterIsCosPoolMember = await isCosPoolMember(requesterId);
+  let cosAutoSatisfyUsed = false;
+  const autoSatisfied = roles.map((role, i) => {
+    if (CLAIMABLE_ROLES.has(role)) {
+      if (requesterIsCosPoolMember && !cosAutoSatisfyUsed) {
+        cosAutoSatisfyUsed = true;
+        return true;
+      }
+      return false;
+    }
+    return approverUserIds[i] === requesterId;
+  });
+
   const requestUpdate = prisma.reimbursementRequest.update({
     where: { id: requestId },
     data: { status: "IN_APPROVAL", submittedAt: new Date(), requesterSignatureStorageKey: signatureStorageKey },
   });
 
   if (canPreserve) {
-    // Only rows that aren't already APPROVED get reset -- an approver who
-    // already signed off is never asked to look again. A previously
-    // REJECTED claimable row also has its claim cleared (approverUserId
-    // back to null) so it's genuinely open to any pool member again, not
-    // silently re-offered only to whoever declined it last time.
-    const rowsToReset = request.requiredApprovals.filter((a) => a.status !== "APPROVED");
+    // Only rows that aren't already APPROVED or AUTO_SATISFIED get reset --
+    // an approver who already signed off (or a tier auto-satisfied because
+    // the requester holds that role) is never asked to look again. A
+    // previously REJECTED claimable row also has its claim cleared
+    // (approverUserId back to null) so it's genuinely open to any pool
+    // member again, not silently re-offered only to whoever declined it
+    // last time.
+    const rowsToReset = request.requiredApprovals.filter(
+      (a) => a.status !== "APPROVED" && a.status !== "AUTO_SATISFIED",
+    );
     await prisma.$transaction([
       ...rowsToReset.map((a) =>
         prisma.requiredApproval.update({
@@ -533,8 +645,10 @@ export async function submitRequest(
           data: {
             reimbursementRequestId: requestId,
             role,
-            status: "PENDING",
-            approverUserId: approverUserIds[i],
+            status: autoSatisfied[i] ? "AUTO_SATISFIED" : "PENDING",
+            approverUserId: autoSatisfied[i] ? requesterId : approverUserIds[i],
+            decidedAt: autoSatisfied[i] ? new Date() : null,
+            comments: autoSatisfied[i] ? autoSatisfyReason(role, request.ministryType) : null,
           },
         }),
       ),
@@ -552,6 +666,13 @@ export async function submitRequest(
       }),
     ]);
   }
+
+  // Covers the edge case where every required tier turned out to be
+  // AUTO_SATISFIED (a tier-1 request self-submitted by its own Ministry
+  // Overseer has no other role at all) -- without this, such a request
+  // would sit at IN_APPROVAL forever with no PENDING row left for anyone
+  // to ever decide.
+  await finalizeIfFullyApproved(requestId);
 
   await prisma.auditLogEntry.create({
     data: {
@@ -801,6 +922,10 @@ export interface RequestProgressApprovalView {
   approverName: string | null;
   status: string;
   decidedAt: string | null; // ISO date
+  // Only meaningful for AUTO_SATISFIED rows -- the audit-trail explanation
+  // of why this tier didn't need a manual decision (request-data.ts's
+  // autoSatisfyReason). Null for every other status.
+  comments: string | null;
 }
 
 export interface RequestProgressView {
@@ -879,6 +1004,7 @@ export async function getRequestProgress(
         approverName: a.approver?.name ?? null,
         status: a.status,
         decidedAt: a.decidedAt ? a.decidedAt.toISOString() : null,
+        comments: a.comments,
       })),
     regionalDirectorOverrideConfirmedAt: r.regionalDirectorOverrideConfirmedAt
       ? r.regionalDirectorOverrideConfirmedAt.toISOString()
