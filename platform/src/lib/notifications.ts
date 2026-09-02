@@ -2,7 +2,17 @@ import { Resend } from "resend";
 import { downloadReceiptBytes } from "@/lib/receipt-storage";
 import { downloadSignatureBytes } from "@/lib/signature-storage";
 import { renderVoucherPdf } from "@/lib/voucher-pdf";
-import { buildApprovedRequestEmail } from "@/lib/notification-content";
+import {
+  buildApprovedRequestEmail,
+  buildStaleDraftReminderEmail,
+  buildNewApprovalNotificationEmail,
+  buildPendingApprovalReminderEmail,
+} from "@/lib/notification-content";
+import type {
+  StaleDraftReminderDetail,
+  ApprovalNotificationDetail,
+  PendingApprovalReminderDetail,
+} from "@/lib/notification-content";
 import type { ApprovedRequestDetail } from "@/lib/request-data";
 
 // Per ADR 0001, email is a notification channel only — it tells a human
@@ -97,4 +107,36 @@ export async function sendApprovedRequestEmail(detail: ApprovedRequestDetail): P
     text,
     attachments: [{ filename: `${detail.voucherNo}.pdf`, content: voucherPdf }, ...fallbackAttachments],
   });
+}
+
+export async function sendStaleDraftReminderEmail(
+  requesterEmail: string,
+  detail: StaleDraftReminderDetail,
+): Promise<void> {
+  const { subject, text } = buildStaleDraftReminderEmail(detail);
+  await getResendClient().emails.send({
+    from: getFromAddress(),
+    to: requesterEmail,
+    subject,
+    text,
+  });
+}
+
+// `to` accepts multiple addresses -- a claimable COS1/COS2 slot has no
+// single approver until someone claims it, so that case goes to the
+// whole COS_POOL (approval-routing.ts) at once, not one person.
+export async function sendNewApprovalNotificationEmail(
+  to: string[],
+  detail: ApprovalNotificationDetail,
+): Promise<void> {
+  const { subject, text } = buildNewApprovalNotificationEmail(detail);
+  await getResendClient().emails.send({ from: getFromAddress(), to, subject, text });
+}
+
+export async function sendPendingApprovalReminderEmail(
+  to: string[],
+  detail: PendingApprovalReminderDetail,
+): Promise<void> {
+  const { subject, text } = buildPendingApprovalReminderEmail(detail);
+  await getResendClient().emails.send({ from: getFromAddress(), to, subject, text });
 }

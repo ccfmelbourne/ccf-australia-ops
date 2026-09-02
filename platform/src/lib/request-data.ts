@@ -2,7 +2,11 @@ import { prisma } from "@/lib/prisma";
 import { formatAmount } from "@/lib/money";
 import { getReceiptDownloadUrl, deleteReceipt } from "@/lib/receipt-storage";
 import { normalizeBsb, formatBsb, assertValidAccountNumber } from "@/lib/bank-details";
-import { sendApprovedRequestEmail } from "@/lib/notifications";
+import {
+  sendApprovedRequestEmail,
+  sendStaleDraftReminderEmail,
+  sendNewApprovalNotificationEmail,
+} from "@/lib/notifications";
 import {
   assertValidSignatureImage,
   buildSignatureStorageKey,
@@ -15,6 +19,7 @@ import {
   APPROVER_ROLES,
   REGIONAL_DIRECTOR_OVERRIDE_CONFIRMER_EMAIL,
   COS_POOL,
+  CLAIMABLE_ROLES,
   getApproverRoleLabel,
 } from "@/lib/approval-routing";
 import type { ApproverRoleValue, ApprovalTier } from "@/lib/approval-routing";
@@ -345,6 +350,66 @@ export async function cleanupStaleEmptyDrafts(): Promise<number> {
   return stale.length;
 }
 
+const THREE_DAYS_MS = 3 * 24 * 60 * 60 * 1000;
+const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
+
+// Nudges a requester about a non-empty DRAFT that's gone quiet (run
+// periodically by Vercel Cron, cron/remind-stale-drafts). "Touched" is
+// the max of the request's own updatedAt, its bank details' updatedAt,
+// and its receipts' uploadedAt -- the latter two don't bump the request
+// row itself, so updatedAt alone would misfire for someone who'd only
+// uploaded a receipt recently.
+export async function sendStaleDraftReminders(): Promise<{ sent: number; candidateCount: number }> {
+  const candidates = await prisma.reimbursementRequest.findMany({
+    where: { status: "DRAFT", lineItems: { some: {} } },
+    include: {
+      requester: true,
+      bankDetails: { select: { updatedAt: true } },
+      receipts: { select: { uploadedAt: true } },
+    },
+  });
+
+  const now = Date.now();
+  let sent = 0;
+  for (const r of candidates) {
+    const timestamps = [r.updatedAt, r.bankDetails?.updatedAt, ...r.receipts.map((rec) => rec.uploadedAt)].filter(
+      (d): d is Date => d != null,
+    );
+    const lastTouchedAt = Math.max(...timestamps.map((d) => d.getTime()));
+    const staleSinceMs = now - lastTouchedAt;
+
+    let tier: 3 | 7 | null = null;
+    if (staleSinceMs >= SEVEN_DAYS_MS && !r.staleReminder7DaySentAt) {
+      tier = 7;
+    } else if (staleSinceMs >= THREE_DAYS_MS && !r.staleReminder3DaySentAt) {
+      tier = 3;
+    }
+    if (!tier) continue;
+
+    try {
+      await sendStaleDraftReminderEmail(r.requester.email, {
+        voucherNo: r.voucherNo,
+        requestType: r.requestType,
+        ministryType: r.ministryType,
+        totalAmount: formatAmount(r.totalAmount),
+        daysStale: tier,
+      });
+      await prisma.reimbursementRequest.update({
+        where: { id: r.id },
+        data:
+          tier === 7
+            ? { staleReminder7DaySentAt: new Date(), staleReminder3DaySentAt: new Date() }
+            : { staleReminder3DaySentAt: new Date() },
+      });
+      sent++;
+    } catch {
+      // Per ADR 0001, a delivery failure here shouldn't crash the run --
+      // this candidate's sent-at field stays unset, so it's retried next time.
+    }
+  }
+  return { sent, candidateCount: candidates.length };
+}
+
 // All statuses (not DRAFT-only like getDraftRequest) -- this is the
 // requester's own landing page, listing everything they've ever created.
 export async function getMyRequests(requesterId: string): Promise<RequestListItemView[]> {
@@ -545,7 +610,7 @@ export async function submitRequest(
 ): Promise<void> {
   const request = await prisma.reimbursementRequest.findFirst({
     where: { id: requestId, requesterId, status: { in: [...EDITABLE_STATUSES] } },
-    include: { lineItems: true, bankDetails: true, receipts: true, requiredApprovals: true },
+    include: { lineItems: true, bankDetails: true, receipts: true, requiredApprovals: true, requester: true },
   });
   if (!request) {
     throw new Error("Request not found.");
@@ -584,7 +649,6 @@ export async function submitRequest(
   // reset. "Preserved" for a claimable role just means it's still in the
   // recomputed role set; who claimed it (if anyone) is a runtime fact, not
   // something resubmission should second-guess.
-  const CLAIMABLE_ROLES = new Set(["COS1", "COS2"]);
   const existingByRole = new Map(request.requiredApprovals.map((a) => [a.role, a]));
   const canPreserve =
     existingByRole.size === roles.length &&
@@ -623,6 +687,12 @@ export async function submitRequest(
     data: { status: "IN_APPROVAL", submittedAt: new Date(), requesterSignatureStorageKey: signatureStorageKey },
   });
 
+  // Rows needing a fresh "approval needed" email once this transaction
+  // commits (sent below, not inside the transaction) -- a row already
+  // PENDING before a preserved resubmission is skipped, since nothing
+  // changed for that approver, but a REJECTED row just reopened counts.
+  const newlyPendingRoles: { role: ApproverRoleValue; approverUserId: string | null }[] = [];
+
   if (canPreserve) {
     // Only rows that aren't already APPROVED or AUTO_SATISFIED get reset --
     // an approver who already signed off (or a tier auto-satisfied because
@@ -634,6 +704,14 @@ export async function submitRequest(
     const rowsToReset = request.requiredApprovals.filter(
       (a) => a.status !== "APPROVED" && a.status !== "AUTO_SATISFIED",
     );
+    for (const a of rowsToReset) {
+      if (a.status === "REJECTED") {
+        newlyPendingRoles.push({
+          role: a.role,
+          approverUserId: CLAIMABLE_ROLES.has(a.role) ? null : a.approverUserId,
+        });
+      }
+    }
     await prisma.$transaction([
       ...rowsToReset.map((a) =>
         prisma.requiredApproval.update({
@@ -644,12 +722,19 @@ export async function submitRequest(
             comments: null,
             signatureStorageKey: null,
             approverUserId: CLAIMABLE_ROLES.has(a.role) ? null : a.approverUserId,
+            pendingSinceAt: new Date(),
+            reminder2DaySentAt: null,
+            reminder5DaySentAt: null,
+            reminder7DaySentAt: null,
           },
         }),
       ),
       requestUpdate,
     ]);
   } else {
+    roles.forEach((role, i) => {
+      if (!autoSatisfied[i]) newlyPendingRoles.push({ role, approverUserId: approverUserIds[i] });
+    });
     await prisma.$transaction([
       prisma.requiredApproval.deleteMany({ where: { reimbursementRequestId: requestId } }),
       ...roles.map((role, i) =>
@@ -661,6 +746,7 @@ export async function submitRequest(
             approverUserId: autoSatisfied[i] ? requesterId : approverUserIds[i],
             decidedAt: autoSatisfied[i] ? new Date() : null,
             comments: autoSatisfied[i] ? autoSatisfyReason(role, request.ministryType) : null,
+            pendingSinceAt: autoSatisfied[i] ? null : new Date(),
           },
         }),
       ),
@@ -697,6 +783,42 @@ export async function submitRequest(
 
   if (previousSignatureStorageKey) {
     await deleteSignature(previousSignatureStorageKey);
+  }
+
+  // Day-0 "approval needed" email for each newlyPendingRoles entry, sent
+  // after the transaction (not inside it) and independently caught per
+  // ADR 0001 -- a missed send here still gets a chance via the 2/5/7-day
+  // reminders in approval-data.ts.
+  if (newlyPendingRoles.length > 0) {
+    const nonClaimableUserIds = newlyPendingRoles
+      .map((r) => r.approverUserId)
+      .filter((id): id is string => id !== null);
+    const approverUsers =
+      nonClaimableUserIds.length > 0
+        ? await prisma.user.findMany({ where: { id: { in: nonClaimableUserIds } } })
+        : [];
+    const emailByUserId = new Map(approverUsers.map((u) => [u.id, u.email]));
+
+    for (const { role, approverUserId } of newlyPendingRoles) {
+      const to = CLAIMABLE_ROLES.has(role)
+        ? [...COS_POOL]
+        : approverUserId && emailByUserId.has(approverUserId)
+          ? [emailByUserId.get(approverUserId)!]
+          : [];
+      if (to.length === 0) continue;
+      try {
+        await sendNewApprovalNotificationEmail(to, {
+          voucherNo: request.voucherNo,
+          requestType: request.requestType,
+          ministryType: request.ministryType,
+          totalAmount: formatAmount(request.totalAmount),
+          requesterName: request.requester.name,
+          roleLabel: getApproverRoleLabel(role, request.ministryType),
+        });
+      } catch {
+        // See the ADR 0001 comment above.
+      }
+    }
   }
 }
 

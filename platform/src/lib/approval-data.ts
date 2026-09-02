@@ -3,12 +3,14 @@ import { formatAmount } from "@/lib/money";
 import { receiptFilename, finalizeIfFullyApproved, isDecided } from "@/lib/request-data";
 import { getReceiptDownloadUrl } from "@/lib/receipt-storage";
 import { assertValidSignatureImage, buildSignatureStorageKey, uploadSignature } from "@/lib/signature-storage";
+import { sendPendingApprovalReminderEmail } from "@/lib/notifications";
 import {
   getTier,
   COS_POOL,
   REGIONAL_DIRECTOR_OVERRIDE_CONFIRMER_EMAIL,
   DEV_TEST_APPROVER_EMAIL,
   DEV_TEST_REQUESTER_EMAIL,
+  getApproverRoleLabel,
 } from "@/lib/approval-routing";
 import type { ApproverRoleValue } from "@/lib/approval-routing";
 import type { RequestTypeValue, MinistryTypeValue } from "@/lib/request-types";
@@ -413,5 +415,70 @@ export async function confirmRegionalDirectorOverride(requestId: string, userId:
     },
   });
   await finalizeIfFullyApproved(requestId);
+}
+
+const TWO_DAYS_MS = 2 * 24 * 60 * 60 * 1000;
+const FIVE_DAYS_MS = 5 * 24 * 60 * 60 * 1000;
+const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
+
+// The follow-up to submitRequest's day-0 notification -- a role still
+// PENDING gets nudged again at 2/5/7 days since pendingSinceAt (run by
+// Vercel Cron, cron/remind-approvers). An unclaimed COS1/COS2 slot goes
+// to the whole COS_POOL, same as the day-0 email.
+export async function sendPendingApprovalReminders(): Promise<{ sent: number; candidateCount: number }> {
+  const candidates = await prisma.requiredApproval.findMany({
+    where: { status: "PENDING", pendingSinceAt: { not: null } },
+    include: { request: { include: { requester: true } } },
+  });
+
+  const now = Date.now();
+  let sent = 0;
+  for (const a of candidates) {
+    const staleSinceMs = now - a.pendingSinceAt!.getTime();
+    let tier: 2 | 5 | 7 | null = null;
+    if (staleSinceMs >= SEVEN_DAYS_MS && !a.reminder7DaySentAt) {
+      tier = 7;
+    } else if (staleSinceMs >= FIVE_DAYS_MS && !a.reminder5DaySentAt) {
+      tier = 5;
+    } else if (staleSinceMs >= TWO_DAYS_MS && !a.reminder2DaySentAt) {
+      tier = 2;
+    }
+    if (!tier) continue;
+
+    const to = CLAIMABLE_ROLES.includes(a.role)
+      ? [...COS_POOL]
+      : a.approverUserId
+        ? [(await prisma.user.findUnique({ where: { id: a.approverUserId } }))?.email].filter(
+            (e): e is string => e != null,
+          )
+        : [];
+    if (to.length === 0) continue;
+
+    try {
+      await sendPendingApprovalReminderEmail(to, {
+        voucherNo: a.request.voucherNo,
+        requestType: a.request.requestType,
+        ministryType: a.request.ministryType,
+        totalAmount: formatAmount(a.request.totalAmount),
+        requesterName: a.request.requester.name,
+        roleLabel: getApproverRoleLabel(a.role, a.request.ministryType),
+        daysPending: tier,
+      });
+      await prisma.requiredApproval.update({
+        where: { id: a.id },
+        data:
+          tier === 7
+            ? { reminder7DaySentAt: new Date(), reminder5DaySentAt: new Date(), reminder2DaySentAt: new Date() }
+            : tier === 5
+              ? { reminder5DaySentAt: new Date(), reminder2DaySentAt: new Date() }
+              : { reminder2DaySentAt: new Date() },
+      });
+      sent++;
+    } catch {
+      // Per ADR 0001, a delivery failure here shouldn't crash the run --
+      // this tier's sent-at field stays unset, so it's retried next time.
+    }
+  }
+  return { sent, candidateCount: candidates.length };
 }
 
