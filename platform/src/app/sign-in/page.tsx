@@ -23,7 +23,7 @@ export default async function SignInPage() {
       </a>
       {process.env.NODE_ENV !== "production" && (
         <div className="flex flex-col items-center gap-2 border-t border-slate-200 pt-6">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
             Local testing only
           </p>
           <div className="flex gap-3">

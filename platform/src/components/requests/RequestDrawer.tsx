@@ -151,7 +151,7 @@ export function RequestDrawer(props: RequestDrawerProps) {
           type="button"
           onClick={handleClose}
           aria-label="Close"
-          className="text-2xl leading-none text-slate-400 hover:text-slate-600"
+          className="-m-2 p-2 text-2xl leading-none text-slate-500 hover:text-slate-700"
         >
           &times;
         </button>
@@ -348,7 +348,7 @@ function SignaturePad({ sigPadRef }: { sigPadRef: React.RefObject<SignatureCanva
         <button
           type="button"
           onClick={() => sigPadRef.current?.clear()}
-          className="text-xs font-medium text-slate-500 hover:text-slate-700"
+          className="-m-1 p-1 text-xs font-medium text-slate-500 hover:text-slate-700"
         >
           Clear
         </button>
@@ -545,7 +545,7 @@ function WizardSteps({
                 ? "bg-teal-600 text-white"
                 : step < furthestStep
                   ? "text-teal-700 hover:bg-teal-50"
-                  : "text-slate-400"
+                  : "text-slate-500"
             }`}
           >
             <span
@@ -554,7 +554,7 @@ function WizardSteps({
                   ? "bg-white text-teal-600"
                   : step <= furthestStep
                     ? "bg-teal-100 text-teal-700"
-                    : "bg-slate-100 text-slate-400"
+                    : "bg-slate-100 text-slate-500"
               }`}
             >
               {step}

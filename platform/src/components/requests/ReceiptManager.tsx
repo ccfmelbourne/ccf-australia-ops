@@ -134,6 +134,8 @@ export function ReceiptManager({
           accept={ACCEPTED_TYPES}
           multiple
           onChange={handleFilesChosen}
+          tabIndex={-1}
+          aria-hidden
           className="sr-only"
         />
         <button
@@ -166,7 +168,7 @@ export function ReceiptManager({
                   <div className="h-full w-2/3 animate-pulse rounded-full bg-teal-500" />
                 </div>
                 {p.status === "scanning" && (
-                  <p className="text-xs text-slate-400">Extracting merchant, date, and amount…</p>
+                  <p className="text-xs text-slate-500">Extracting merchant, date, and amount…</p>
                 )}
               </div>
             ))}
@@ -196,7 +198,7 @@ export function ReceiptManager({
                       href={r.viewUrl}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="text-teal-700 hover:underline"
+                      className="-m-1 p-1 text-teal-700 hover:underline"
                     >
                       View
                     </a>
@@ -204,7 +206,7 @@ export function ReceiptManager({
                       type="button"
                       disabled={isPending}
                       onClick={() => handleRemove(r.id)}
-                      className="text-red-600 hover:underline disabled:opacity-60"
+                      className="-m-1 p-1 text-red-600 hover:underline disabled:opacity-60"
                     >
                       Remove
                     </button>

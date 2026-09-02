@@ -103,7 +103,7 @@ export function ApprovalDrawer({
           type="button"
           onClick={handleClose}
           aria-label="Close"
-          className="text-2xl leading-none text-slate-400 hover:text-slate-600"
+          className="-m-2 p-2 text-2xl leading-none text-slate-500 hover:text-slate-700"
         >
           &times;
         </button>
@@ -166,7 +166,7 @@ export function ApprovalDrawer({
                     href={r.viewUrl}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="shrink-0 text-teal-700 hover:underline"
+                    className="-m-1 shrink-0 p-1 text-teal-700 hover:underline"
                   >
                     View
                   </a>
@@ -195,7 +195,7 @@ export function ApprovalDrawer({
             <button
               type="button"
               onClick={() => sigPadRef.current?.clear()}
-              className="text-xs font-medium text-slate-500 hover:text-slate-700"
+              className="-m-1 p-1 text-xs font-medium text-slate-500 hover:text-slate-700"
             >
               Clear
             </button>
