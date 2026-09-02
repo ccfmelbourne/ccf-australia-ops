@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import SignatureCanvas from "react-signature-canvas";
+import { Button } from "@/components/Button";
 import { ErrorBanner } from "@/components/ErrorBanner";
 import { decideApprovalAction, requestChangesAction } from "@/app/approvals/actions";
 import { REQUEST_TYPE_LABELS, MINISTRY_TYPE_LABELS } from "@/lib/request-types";
@@ -208,30 +209,15 @@ export function ApprovalDrawer({
         {error && <ErrorBanner message={error} />}
 
         <div className="flex gap-3">
-          <button
-            type="button"
-            disabled={isPending}
-            onClick={() => handleDecide("APPROVED")}
-            className="rounded-md bg-teal-600 px-4 py-2 text-sm font-semibold text-white hover:bg-teal-700 disabled:opacity-60"
-          >
+          <Button disabled={isPending} onClick={() => handleDecide("APPROVED")}>
             {isPending ? "Saving…" : "Approve"}
-          </button>
-          <button
-            type="button"
-            disabled={isPending}
-            onClick={() => handleDecide("REJECTED")}
-            className="rounded-md border border-red-300 px-4 py-2 text-sm font-semibold text-red-600 hover:bg-red-50 disabled:opacity-60"
-          >
+          </Button>
+          <Button variant="danger" disabled={isPending} onClick={() => handleDecide("REJECTED")}>
             Reject
-          </button>
-          <button
-            type="button"
-            disabled={isPending}
-            onClick={handleRequestChanges}
-            className="rounded-md border border-amber-300 px-4 py-2 text-sm font-semibold text-amber-700 hover:bg-amber-50 disabled:opacity-60"
-          >
+          </Button>
+          <Button variant="warning" disabled={isPending} onClick={handleRequestChanges}>
             Request Changes
-          </button>
+          </Button>
         </div>
       </div>
     </dialog>

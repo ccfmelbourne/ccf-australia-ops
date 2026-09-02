@@ -19,6 +19,7 @@ import type { RequestTypeValue, MinistryTypeValue } from "@/lib/request-types";
 import { LineItemManager } from "./LineItemManager";
 import { ReceiptManager } from "./ReceiptManager";
 import { BankDetailsManager } from "./BankDetailsManager";
+import { Button } from "@/components/Button";
 import { ErrorBanner } from "@/components/ErrorBanner";
 import { RequestStatusBadge } from "@/components/RequestStatusBadge";
 import { WizardSteps } from "./WizardSteps";
@@ -215,13 +216,9 @@ export function RequestDrawer(props: RequestDrawerProps) {
 // it doesn't visually compete with Continue/Submit.
 function CloseButton({ onClose }: { onClose: () => void }) {
   return (
-    <button
-      type="button"
-      onClick={onClose}
-      className="rounded-md border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100"
-    >
+    <Button variant="secondary" onClick={onClose}>
       Close
-    </button>
+    </Button>
   );
 }
 
@@ -356,14 +353,9 @@ function CreateStep({
       {error && <ErrorBanner message={error} />}
       <div className="flex justify-between">
         <CloseButton onClose={onClose} />
-        <button
-          type="button"
-          disabled={isPending || !requestType || !ministryType}
-          onClick={handleContinue}
-          className="rounded-md bg-teal-600 px-4 py-2 text-sm font-semibold text-white hover:bg-teal-700 disabled:opacity-60"
-        >
+        <Button disabled={isPending || !requestType || !ministryType} onClick={handleContinue}>
           {isPending ? "Creating…" : "Continue →"}
-        </button>
+        </Button>
       </div>
     </div>
   );
@@ -538,21 +530,12 @@ function SubmitConfirmDialog({
         Your request will be sent to the required approvers for review.
       </p>
       <div className="mt-5 flex justify-end gap-3">
-        <button
-          type="button"
-          onClick={handleClose}
-          className="rounded-md border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100"
-        >
+        <Button variant="secondary" onClick={handleClose}>
           Cancel
-        </button>
-        <button
-          type="button"
-          disabled={isPending}
-          onClick={onConfirm}
-          className="rounded-md bg-teal-600 px-4 py-2 text-sm font-semibold text-white hover:bg-teal-700 disabled:opacity-60"
-        >
+        </Button>
+        <Button disabled={isPending} onClick={onConfirm}>
           {isPending ? "Submitting…" : isResubmit ? "Resubmit request" : "Submit request"}
-        </button>
+        </Button>
       </div>
     </dialog>
   );
@@ -645,14 +628,9 @@ function EditContent({ data, onClose }: { data: DraftRequestView; onClose: () =>
         {submitError && <ErrorBanner message={submitError} />}
         <div className="flex justify-between">
           <CloseButton onClose={onClose} />
-          <button
-            type="button"
-            disabled={isSubmitPending}
-            onClick={handleSubmitClick}
-            className="rounded-md bg-teal-600 px-4 py-2 text-sm font-semibold text-white hover:bg-teal-700 disabled:opacity-60"
-          >
+          <Button disabled={isSubmitPending} onClick={handleSubmitClick}>
             {data.returnReason ? "Resubmit" : "Submit"}
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -767,13 +745,9 @@ function CreateWizard({ data, onClose }: { data: DraftRequestView; onClose: () =
   const canContinueFromPayment = data.bankDetails !== null;
 
   const backButton = (
-    <button
-      type="button"
-      onClick={goBack}
-      className="rounded-md border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100"
-    >
+    <Button variant="secondary" onClick={goBack}>
       ← Back
-    </button>
+    </Button>
   );
 
   return (
@@ -789,13 +763,7 @@ function CreateWizard({ data, onClose }: { data: DraftRequestView; onClose: () =
           />
           <div className="flex justify-between">
             <CloseButton onClose={onClose} />
-            <button
-              type="button"
-              onClick={goNext}
-              className="rounded-md bg-teal-600 px-4 py-2 text-sm font-semibold text-white hover:bg-teal-700"
-            >
-              Continue →
-            </button>
+            <Button onClick={goNext}>Continue →</Button>
           </div>
         </>
       )}
@@ -816,14 +784,9 @@ function CreateWizard({ data, onClose }: { data: DraftRequestView; onClose: () =
                 {backButton}
                 <CloseButton onClose={onClose} />
               </div>
-              <button
-                type="button"
-                disabled={!canContinueFromExpenses}
-                onClick={goNext}
-                className="rounded-md bg-teal-600 px-4 py-2 text-sm font-semibold text-white hover:bg-teal-700 disabled:opacity-60"
-              >
+              <Button disabled={!canContinueFromExpenses} onClick={goNext}>
                 Continue →
-              </button>
+              </Button>
             </div>
             {!canContinueFromExpenses && (
               <p className="text-right text-xs text-slate-500">
@@ -845,14 +808,9 @@ function CreateWizard({ data, onClose }: { data: DraftRequestView; onClose: () =
                 {backButton}
                 <CloseButton onClose={onClose} />
               </div>
-              <button
-                type="button"
-                disabled={!canContinueFromPayment}
-                onClick={goNext}
-                className="rounded-md bg-teal-600 px-4 py-2 text-sm font-semibold text-white hover:bg-teal-700 disabled:opacity-60"
-              >
+              <Button disabled={!canContinueFromPayment} onClick={goNext}>
                 Continue →
-              </button>
+              </Button>
             </div>
             {!canContinueFromPayment && (
               <p className="text-right text-xs text-slate-500">Save bank details to continue.</p>
@@ -872,14 +830,9 @@ function CreateWizard({ data, onClose }: { data: DraftRequestView; onClose: () =
                 {backButton}
                 <CloseButton onClose={onClose} />
               </div>
-              <button
-                type="button"
-                disabled={isSubmitPending}
-                onClick={handleSubmitClick}
-                className="rounded-md bg-teal-600 px-4 py-2 text-sm font-semibold text-white hover:bg-teal-700 disabled:opacity-60"
-              >
+              <Button disabled={isSubmitPending} onClick={handleSubmitClick}>
                 Submit reimbursement
-              </button>
+              </Button>
             </div>
           </div>
         </>

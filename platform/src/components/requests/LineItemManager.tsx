@@ -3,7 +3,9 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { addLineItemAction, removeLineItemAction, updateLineItemAction } from "@/app/requests/actions";
+import { Button } from "@/components/Button";
 import { ErrorBanner } from "@/components/ErrorBanner";
+import { Input } from "@/components/Input";
 import { SectionHeading } from "@/components/SectionHeading";
 import type { DraftLineItemView } from "@/lib/request-data";
 
@@ -188,19 +190,18 @@ export function LineItemManager({
             <label htmlFor="description" className="text-sm font-medium text-slate-700">
               Description
             </label>
-            <input
+            <Input
               id="description"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               required
-              className="rounded-md border border-slate-300 px-3 py-2 text-sm"
             />
           </div>
           <div className="flex flex-col gap-1">
             <label htmlFor="amount" className="text-sm font-medium text-slate-700">
               Amount
             </label>
-            <input
+            <Input
               id="amount"
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
@@ -208,17 +209,12 @@ export function LineItemManager({
               step="0.01"
               min="0.01"
               required
-              className="rounded-md border border-slate-300 px-3 py-2 text-sm"
             />
           </div>
           {error && <ErrorBanner message={error} />}
-          <button
-            type="submit"
-            disabled={isPending}
-            className="self-start rounded-md bg-teal-600 px-4 py-2 text-sm font-semibold text-white hover:bg-teal-700 disabled:opacity-60"
-          >
+          <Button type="submit" disabled={isPending} className="self-start">
             {isPending ? "Saving…" : "Add item"}
-          </button>
+          </Button>
         </form>
       </section>
     </div>
