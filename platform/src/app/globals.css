@@ -57,7 +57,7 @@ body {
   @keyframes drawer-slide-in {
     from {
       opacity: 0;
-      transform: translateX(12px);
+      transform: translateX(-12px);
     }
   }
 
@@ -69,7 +69,7 @@ body {
     animation: dialog-fade-in 150ms ease-out;
   }
 
-  /* Applied to the right-side panel drawers (RequestDrawer,
+  /* Applied to the left-side panel drawers (RequestDrawer,
      RequestProgressDrawer, ApprovalDrawer) -- the smaller centered confirm
      dialog just gets the plain fade above, since it isn't a slide-in panel. */
   dialog.drawer-panel[open] {

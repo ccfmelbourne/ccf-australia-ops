@@ -19,6 +19,7 @@ import type { RequestTypeValue, MinistryTypeValue } from "@/lib/request-types";
 import { LineItemManager } from "./LineItemManager";
 import { ReceiptManager } from "./ReceiptManager";
 import { BankDetailsManager } from "./BankDetailsManager";
+import { CloseButton } from "./CloseButton";
 import { Button } from "@/components/Button";
 import { ErrorBanner } from "@/components/ErrorBanner";
 import { RequestStatusBadge } from "@/components/RequestStatusBadge";
@@ -57,7 +58,7 @@ const SORTED_MINISTRY_TYPES = [...MINISTRY_TYPES].sort((a, b) =>
   MINISTRY_TYPE_LABELS[a].localeCompare(MINISTRY_TYPE_LABELS[b]),
 );
 
-// A native <dialog> styled as a right-side panel on wide viewports and a
+// A native <dialog> styled as a left-side panel on wide viewports and a
 // full-screen sheet on small ones -- w-full capped by max-w-xl gives that
 // responsiveness for free (below ~36rem viewport width it's already full
 // width, no separate breakpoint needed). <dialog> gives focus-trapping,
@@ -150,7 +151,12 @@ export function RequestDrawer(props: RequestDrawerProps) {
       // that stays true regardless of a stray click's exact position.
       closedby="none"
       aria-labelledby="drawer-title"
-      className="drawer-panel fixed inset-y-0 right-0 m-0 h-dvh w-full max-w-xl overflow-y-auto rounded-l-lg bg-white p-6 shadow-xl backdrop:bg-black/40"
+      // Opens from the left edge (decision-maker's call) -- rounded-r-lg,
+      // not rounded-l-lg, since the flush edge is now the left one (a
+      // rounded corner right at the viewport boundary isn't visible
+      // anyway) and the inner edge facing the rest of the page is the
+      // right one.
+      className="drawer-panel fixed inset-y-0 left-0 m-0 h-dvh w-full max-w-xl overflow-y-auto rounded-r-lg bg-white p-6 shadow-xl backdrop:bg-black/40"
     >
       <div className="flex items-center justify-between border-b border-slate-200 pb-4">
         <span className="flex items-center gap-2">
@@ -206,22 +212,6 @@ export function RequestDrawer(props: RequestDrawerProps) {
         )}
       </div>
     </dialog>
-  );
-}
-
-// A second, explicit way to close the drawer beyond the header's X --
-// confirmed with the decision-maker after removing backdrop-click-to-close
-// (to prevent accidental dismissal) left the X as the only way out, and the
-// header isn't sticky, so it scrolls out of view on a long form. Placed
-// alongside each step's own action row instead, so it's reachable from
-// wherever the requester's actually scrolled to. Styled like the wizard's
-// own secondary "← Back" button (bordered, not the primary teal action) so
-// it doesn't visually compete with Continue/Submit.
-function CloseButton({ onClose }: { onClose: () => void }) {
-  return (
-    <Button variant="secondary" onClick={onClose}>
-      Close
-    </Button>
   );
 }
 
@@ -511,7 +501,7 @@ function SignaturePad({ sigPadRef }: { sigPadRef: React.RefObject<SignatureCanva
 // top-layer dialog to render above the rest of the page -- a plain
 // overlay positioned to cover the same box as the drawer itself (see
 // className below, deliberately mirroring RequestDrawer's own
-// inset-y-0/right-0/max-w-xl) sits on top of the drawer's own content
+// inset-y-0/left-0/max-w-xl) sits on top of the drawer's own content
 // without ever opening a second modal, sidestepping the browser behavior
 // entirely instead of working around it.
 function SubmitConfirmDialog({
@@ -538,7 +528,7 @@ function SubmitConfirmDialog({
       onClick={(e) => {
         if (e.target === e.currentTarget) onCancel();
       }}
-      className="fixed inset-y-0 right-0 z-10 flex w-full max-w-xl items-center justify-center bg-black/40 p-6"
+      className="fixed inset-y-0 left-0 z-10 flex w-full max-w-xl items-center justify-center bg-black/40 p-6"
     >
       <div
         role="alertdialog"
