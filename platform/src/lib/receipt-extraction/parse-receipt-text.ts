@@ -166,6 +166,17 @@ const SKU_ONLY = /^\d{3,}$/;
 const SYMBOLS_ONLY = /^[^a-zA-Z0-9]*$/;
 const RECEIPT_BOILERPLATE = /^(tax\s+invoice|invoice|receipt|items?|description)\s*:?$/i;
 
+// A circuit breaker for formal invoices with no "Items" header and no
+// early totals line (e.g. a SaaS subscription invoice) -- without an
+// early boundary, the item block can span almost the whole document
+// (address, billing period, subscription ID...) and still resolve to one
+// dollar amount, since a real invoice often repeats the same total two or
+// three times. Found live: a Renewed Vision invoice produced a ~340
+// character "item" that was really most of the invoice. A real product
+// name is never this long, so past this length the result is noise, not
+// a name -- null (merchant-only) is the safer fallback.
+const MAX_ITEM_DESCRIPTION_LENGTH = 100;
+
 function isNoiseLine(line: string): boolean {
   return (
     parseDate(line) !== null ||
@@ -221,7 +232,8 @@ export function parseItemDescription(text: string): string | null {
     .join(" ")
     .replace(/^\*+\s*/, "")
     .trim();
-  return description.length > 0 ? description : null;
+  if (description.length === 0 || description.length > MAX_ITEM_DESCRIPTION_LENGTH) return null;
+  return description;
 }
 
 export function parseReceiptText(text: string): Omit<ReceiptExtractionResult, "rawText"> {
