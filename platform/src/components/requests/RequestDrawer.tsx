@@ -195,22 +195,31 @@ function CreateStep({ onCreated }: { onCreated: (data: DraftRequestView) => void
     if (startedRef.current) return;
     startedRef.current = true;
     (async () => {
-      const result = await createDraftRequestForDrawerAction(REQUEST_TYPES[0], MINISTRY_TYPES[0]);
-      if (result.ok && result.id && result.voucherNo && result.requesterName) {
-        onCreated({
-          id: result.id,
-          voucherNo: result.voucherNo,
-          requesterName: result.requesterName,
-          requestType: REQUEST_TYPES[0],
-          ministryType: MINISTRY_TYPES[0],
-          totalAmount: "0.00",
-          lineItems: [],
-          receipts: [],
-          bankDetails: null,
-          returnReason: null,
-        });
-      } else {
-        setError(result.error ?? "Something went wrong.");
+      // Belt-and-suspenders alongside the action's own try/catch -- a
+      // transport-level failure calling the action at all (not just a
+      // failure inside it) would otherwise reject this promise with
+      // nothing here to catch it, leaving the skeleton showing forever
+      // instead of an actual error the requester can see.
+      try {
+        const result = await createDraftRequestForDrawerAction(REQUEST_TYPES[0], MINISTRY_TYPES[0]);
+        if (result.ok && result.id && result.voucherNo && result.requesterName) {
+          onCreated({
+            id: result.id,
+            voucherNo: result.voucherNo,
+            requesterName: result.requesterName,
+            requestType: REQUEST_TYPES[0],
+            ministryType: MINISTRY_TYPES[0],
+            totalAmount: "0.00",
+            lineItems: [],
+            receipts: [],
+            bankDetails: null,
+            returnReason: null,
+          });
+        } else {
+          setError(result.error ?? "Something went wrong.");
+        }
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Something went wrong.");
       }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
