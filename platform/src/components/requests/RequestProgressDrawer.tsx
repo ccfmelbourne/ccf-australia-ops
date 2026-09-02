@@ -140,7 +140,7 @@ export function RequestProgressDrawer({
         if (e.target === dialogRef.current) handleClose();
       }}
       aria-labelledby="progress-drawer-title"
-      className="fixed inset-y-0 right-0 m-0 h-dvh w-full max-w-xl overflow-y-auto rounded-l-lg bg-white p-6 shadow-xl backdrop:bg-black/40"
+      className="drawer-panel fixed inset-y-0 right-0 m-0 h-dvh w-full max-w-xl overflow-y-auto rounded-l-lg bg-white p-6 shadow-xl backdrop:bg-black/40"
     >
       <div className="flex items-center justify-between border-b border-slate-200 pb-4">
         <h2 id="progress-drawer-title" className="text-lg font-bold text-slate-900">
