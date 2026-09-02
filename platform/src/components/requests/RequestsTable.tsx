@@ -196,15 +196,29 @@ export function RequestsTable({
         </div>
       )}
 
-      {creating && <RequestDrawer mode="create" onCreated={handleCreated} onClose={closeDrawer} />}
-      {effectiveOpenRequest && (
-        <RequestDrawer
-          mode="edit"
-          data={effectiveOpenRequest}
-          showWizard={openedViaCreate}
-          onClose={closeDrawer}
-        />
-      )}
+      {/* One conditional expression, not two -- {a && <X/>} {b && <X/>} at
+          separate JSX positions would make React unmount the first
+          RequestDrawer and mount a brand-new one the instant `creating`
+          flips off and `effectiveOpenRequest` flips on, even though it's
+          conceptually the same dialog continuing into its next phase.
+          That's a real, visible bug: the dialog would close and reopen
+          (replaying its open animation) right as the draft finishes being
+          created -- found via the decision-maker watching it happen. A
+          single ternary at one position keeps it the same component
+          instance (same mounted <dialog>, same open animation played
+          once), so only its content swaps from the skeleton to the real
+          fields. */}
+      {(creating || effectiveOpenRequest) &&
+        (effectiveOpenRequest ? (
+          <RequestDrawer
+            mode="edit"
+            data={effectiveOpenRequest}
+            showWizard={openedViaCreate}
+            onClose={closeDrawer}
+          />
+        ) : (
+          <RequestDrawer mode="create" onCreated={handleCreated} onClose={closeDrawer} />
+        ))}
       {progressRequest && <RequestProgressDrawer data={progressRequest} onClose={closeDrawer} />}
     </div>
   );

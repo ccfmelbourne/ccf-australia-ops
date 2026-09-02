@@ -51,12 +51,24 @@ export async function createDraftRequestForDrawerAction(
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input" };
   }
 
-  const { id, voucherNo, requesterName } = await createDraftRequest(
-    userId,
-    parsed.data.requestType,
-    parsed.data.ministryType,
-  );
-  return { ok: true, id, voucherNo, requesterName };
+  // Unlike every other action in this file, this one previously had no
+  // try/catch -- a thrown error (a DB hiccup, anything) rejected the
+  // Server Action call itself instead of resolving with { ok: false }.
+  // CreateStep's effect has no catch of its own around this await either,
+  // so the rejection went nowhere useful: no error state ever got set, no
+  // ErrorBanner ever showed, and the drawer was left looking like it had
+  // simply failed to open. Wrapping it here is what makes that existing
+  // ErrorBanner path actually reachable for a real backend failure.
+  try {
+    const { id, voucherNo, requesterName } = await createDraftRequest(
+      userId,
+      parsed.data.requestType,
+      parsed.data.ministryType,
+    );
+    return { ok: true, id, voucherNo, requesterName };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Something went wrong." };
+  }
 }
 
 export async function updateRequestDetailsAction(
