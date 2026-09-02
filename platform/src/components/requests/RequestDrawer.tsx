@@ -38,7 +38,7 @@ import type { DraftRequestView } from "@/lib/request-data";
 // (EditContent) has no such per-step gating at all, so this is the only
 // check it gets before submitting.
 function getSubmitBlockingError(data: DraftRequestView): string | null {
-  if (data.lineItems.length === 0) return "Add at least one line item before submitting.";
+  if (data.lineItems.length === 0) return "Add at least one item before submitting.";
   if (!data.bankDetails) return "Add bank details before submitting.";
   if (data.requestType !== "CASH_ADVANCE" && data.receipts.length === 0) {
     return "Attach at least one receipt before submitting.";
@@ -68,11 +68,28 @@ type RequestDrawerProps =
 
 export function RequestDrawer(props: RequestDrawerProps) {
   const dialogRef = useRef<HTMLDialogElement>(null);
+  // Identifies which logical session (creating vs. editing a specific
+  // request) this render represents. RequestsTable.tsx deliberately keeps
+  // the same <RequestDrawer> instance across the create -> edit handoff
+  // (see its comment), and native dialog.close() closes the panel
+  // synchronously while the router navigation that clears `openRequest`
+  // resolves asynchronously -- so a fast close-then-open-a-different-
+  // request can also land as new props on this same instance, without a
+  // remount, rather than the close having actually completed first. An
+  // effect keyed on [] would only ever call showModal() once per mount and
+  // silently never reopen the dialog for that later session (found via a
+  // live report of the panel intermittently not opening) -- keying on
+  // sessionKey instead re-runs this effect whenever the session actually
+  // changes, regardless of whether the component instance was reused. The
+  // `!dialog.open` guard still makes this a no-op during the create -> edit
+  // handoff, where the dialog is already open and calling showModal() again
+  // would throw.
+  const sessionKey = props.mode === "edit" ? props.data.id : "create";
 
   useEffect(() => {
     const dialog = dialogRef.current;
     if (dialog && !dialog.open) dialog.showModal();
-  }, []);
+  }, [sessionKey]);
 
   // dialog.close() synchronously fires the native "close" event, which the
   // onClose prop below already handles -- no need to also call
@@ -160,9 +177,15 @@ export function RequestDrawer(props: RequestDrawerProps) {
           // instead. Confirmed with the decision-maker after an earlier
           // version wrongly kept showing the wizard on every reopen of an
           // unsubmitted draft, not just the initial creation.
-          <CreateWizard data={props.data} onClose={handleClose} />
+          // Keyed by request id (not just relying on the props update) so
+          // this component's own internal state -- RequestDetailsFields'
+          // request-type/ministry dropdowns, the signature pad, etc. --
+          // always resets when switching to a different request, even in
+          // the rare case where the outer RequestDrawer instance above
+          // wasn't remounted (see sessionKey's comment).
+          <CreateWizard key={props.data.id} data={props.data} onClose={handleClose} />
         ) : (
-          <EditContent data={props.data} onClose={handleClose} />
+          <EditContent key={props.data.id} data={props.data} onClose={handleClose} />
         )}
       </div>
     </dialog>
@@ -638,10 +661,10 @@ function CreateWizard({ data, onClose }: { data: DraftRequestView; onClose: () =
         <>
           <div className="flex flex-col divide-y divide-slate-200">
             <div className="pb-6">
-              <ReceiptManager requestId={data.id} receipts={data.receipts} />
+              <LineItemManager requestId={data.id} lineItems={data.lineItems} totalAmount={data.totalAmount} />
             </div>
             <div className="pt-6">
-              <LineItemManager requestId={data.id} lineItems={data.lineItems} totalAmount={data.totalAmount} />
+              <ReceiptManager requestId={data.id} receipts={data.receipts} />
             </div>
           </div>
           <div className="flex flex-col gap-2">
