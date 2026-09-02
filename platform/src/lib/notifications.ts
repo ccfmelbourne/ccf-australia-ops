@@ -67,6 +67,19 @@ export async function sendApprovedRequestEmail(detail: ApprovedRequestDetail): P
       ? downloadSignatureBytes(detail.requesterSignatureStorageKey)
       : Promise.resolve(null),
   ]);
+  // An AUTO_SATISFIED approval (the requester is also that tier's
+  // designated approver -- request-data.ts's submitRequest) never has its
+  // own signatureStorageKey, since they never click "Approve" on their own
+  // request. Confirmed with the decision-maker: the voucher should still
+  // show a real signature there rather than leaving it blank, reusing the
+  // same one they already drew for "Requisitioned By" -- it's the same
+  // person's attestation either way, and this doesn't add a second signing
+  // action.
+  for (const a of detail.approvals) {
+    if (a.status === "AUTO_SATISFIED" && requesterSignature) {
+      signaturesByRole.set(a.role, requesterSignature);
+    }
+  }
   const { buffer: voucherPdf, unembeddableReceiptFilenames } = await renderVoucherPdf(
     detail,
     receiptFiles,
