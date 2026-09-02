@@ -14,6 +14,11 @@ export const APPROVER_ROLES = [
 ] as const;
 export type ApproverRoleValue = (typeof APPROVER_ROLES)[number];
 
+// COS1/COS2 are claimable positions open to any of COS_POOL below, not a
+// single pre-assigned person -- their RequiredApproval rows carry
+// approverUserId: null until claimed at decision time.
+export const CLAIMABLE_ROLES: ReadonlySet<ApproverRoleValue> = new Set(["COS1", "COS2"]);
+
 export const APPROVER_ROLE_LABELS: Record<ApproverRoleValue, string> = {
   MINISTRY_OVERSEER: "Ministry Overseer",
   COS1: "COS 1",

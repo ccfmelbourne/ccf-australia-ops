@@ -149,6 +149,11 @@ model ReimbursementRequest {
   // confirmRegionalDirectorOverride/isFullyApproved. Requires COS1+COS2
   // (already required for tier 4 regardless) to both be APPROVED first.
   regionalDirectorOverrideConfirmedAt DateTime?
+
+  // Set once each stale-draft reminder tier has been emailed to the
+  // requester (cron/remind-stale-drafts) -- see sendStaleDraftReminders.
+  staleReminder3DaySentAt DateTime?
+  staleReminder7DaySentAt DateTime?
 }
 
 model LineItem {
@@ -212,6 +217,16 @@ model RequiredApproval {
   // this feature existed -- the voucher PDF renders a "No signature on
   // file" fallback for those rather than assuming one always exists.
   signatureStorageKey    String?
+
+  // Set explicitly (not @updatedAt) whenever this row becomes PENDING --
+  // drives the approver reminder schedule, see approval-data.ts's
+  // sendPendingApprovalReminders.
+  pendingSinceAt      DateTime?
+  // Cleared back to null alongside pendingSinceAt on every reset, so an
+  // earlier pending period's reminder doesn't suppress a fresh one.
+  reminder2DaySentAt DateTime?
+  reminder5DaySentAt DateTime?
+  reminder7DaySentAt DateTime?
 
   @@unique([reimbursementRequestId, role])
 }

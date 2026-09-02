@@ -6,6 +6,8 @@
     }
   },
   "crons": [
-    { "path": "/api/cron/cleanup-stale-drafts", "schedule": "0 3 * * *" }
+    { "path": "/api/cron/cleanup-stale-drafts", "schedule": "0 3 * * *" },
+    { "path": "/api/cron/remind-stale-drafts", "schedule": "0 4 * * *" },
+    { "path": "/api/cron/remind-approvers", "schedule": "0 5 * * *" }
   ]
 }

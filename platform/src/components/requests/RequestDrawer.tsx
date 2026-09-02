@@ -84,6 +84,17 @@ export function RequestDrawer(props: RequestDrawerProps) {
   // handoff, where the dialog is already open and calling showModal() again
   // would throw.
   const sessionKey = props.mode === "edit" ? props.data.id : "create";
+  // Set inside handleDialogClose below, which the native "close" event
+  // fires for every genuine close path uniformly (the X button, the lower
+  // Close button, and Escape). Passed down to CreateStep so it can tell a
+  // real close-while-creating apart from React Strict Mode's dev-only
+  // synthetic unmount/remount of every component on initial mount --
+  // CreateStep previously inferred "closed" from its own cleanup effect,
+  // which Strict Mode's double-invoke set permanently true on every
+  // mount regardless of whether the requester ever closed anything,
+  // silently deleting every draft it created in dev. A ref owned here,
+  // set only by an actual close event, isn't affected by that.
+  const closedRef = useRef(false);
 
   useEffect(() => {
     const dialog = dialogRef.current;
@@ -118,6 +129,7 @@ export function RequestDrawer(props: RequestDrawerProps) {
   // first means the table's one and only re-fetch already reflects the
   // row being gone.
   async function handleDialogClose() {
+    closedRef.current = true;
     if (props.mode === "edit" && props.data.returnReason === null && props.data.lineItems.length === 0) {
       await deleteRequestAction(props.data.id);
     }
@@ -128,9 +140,11 @@ export function RequestDrawer(props: RequestDrawerProps) {
     <dialog
       ref={dialogRef}
       onClose={handleDialogClose}
-      onClick={(e) => {
-        if (e.target === dialogRef.current) handleClose();
-      }}
+      // Deliberately no backdrop-click-to-close -- confirmed with the
+      // decision-maker after a report of accidentally closing this panel
+      // via a stray click near its edge. The X button (and the browser's
+      // own Escape-key handling, unaffected by this) stay as the only
+      // ways to dismiss it.
       aria-labelledby="drawer-title"
       className="drawer-panel fixed inset-y-0 right-0 m-0 h-dvh w-full max-w-xl overflow-y-auto rounded-l-lg bg-white p-6 shadow-xl backdrop:bg-black/40"
     >
@@ -167,7 +181,7 @@ export function RequestDrawer(props: RequestDrawerProps) {
 
       <div className="flex flex-col gap-6 pt-4">
         {props.mode === "create" ? (
-          <CreateStep onCreated={props.onCreated} />
+          <CreateStep onCreated={props.onCreated} onClose={handleClose} closedRef={closedRef} />
         ) : props.showWizard ? (
           // The step-by-step wizard is only for the live moment right
           // after clicking "Create Request" (RequestsTable.tsx's
@@ -191,15 +205,36 @@ export function RequestDrawer(props: RequestDrawerProps) {
   );
 }
 
-// Creates the draft once, immediately, with sensible defaults (the first
-// RequestType/MinistryType) rather than waiting for the user to pick both
-// fields first. An earlier version created on every dropdown change, which
-// raced two picks made in quick succession into two separate drafts (the
-// first one silently orphaned) -- found via live testing. Once created,
-// the drawer transitions straight into the same EditContent view, where
-// changing type/ministry is a single field's own update call with no such
-// race. A ref (not just state) guards against React re-invoking the effect
-// (e.g. Strict Mode's dev-only double-invoke) from firing a second create.
+// A second, explicit way to close the drawer beyond the header's X --
+// confirmed with the decision-maker after removing backdrop-click-to-close
+// (to prevent accidental dismissal) left the X as the only way out, and the
+// header isn't sticky, so it scrolls out of view on a long form. Placed
+// alongside each step's own action row instead, so it's reachable from
+// wherever the requester's actually scrolled to. Styled like the wizard's
+// own secondary "← Back" button (bordered, not the primary teal action) so
+// it doesn't visually compete with Continue/Submit.
+function CloseButton({ onClose }: { onClose: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClose}
+      className="rounded-md border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100"
+    >
+      Close
+    </button>
+  );
+}
+
+// Requires an explicit request-type and ministry pick before the draft is
+// even created -- no request exists yet at this point, so there's nothing
+// to default to that wouldn't just be an arbitrary "first in the list"
+// guess the requester has to notice and override (confirmed with the
+// decision-maker after a live report that every new request looked like
+// it was auto-selecting "Cash Advance"/"Admin", since that's genuinely
+// what it always defaulted to). The draft is only created -- with the
+// requester's own chosen values -- once they click Continue; the button's
+// own isPending disabled state stops a double-click from racing two picks
+// into two separate drafts.
 //
 // onCreated receives the full initial DraftRequestView, built right here
 // from the action's result, rather than just an id -- the caller used to
@@ -209,35 +244,37 @@ export function RequestDrawer(props: RequestDrawerProps) {
 // round-trip created a render where neither this "creating" step nor the
 // eventual edit view was mounted, which visibly closed and reopened the
 // dialog -- found via live testing.
-// Requires an explicit request-type and ministry pick before the draft is
-// even created -- no request exists yet at this point, so there's nothing
-// to default to that wouldn't just be an arbitrary "first in the list"
-// guess the requester has to notice and override (confirmed with the
-// decision-maker after a live report that every new request looked like
-// it was auto-selecting "Cash Advance"/"Admin", since that's genuinely
-// what it always defaulted to). The draft is only created -- with the
-// requester's own chosen values -- once they click Continue.
-function CreateStep({ onCreated }: { onCreated: (data: DraftRequestView) => void }) {
+//
+// closedRef (owned by RequestDrawer, set inside its handleDialogClose)
+// covers a fast close-while-creating: the X/lower Close button/Escape
+// aren't gated by isPending the way Continue is, so the draft-creation
+// call can still be in flight when the requester closes the drawer. If it
+// resolves after that, this deletes the just-created draft instead of
+// calling onCreated -- otherwise the drawer would silently reopen on a
+// request the requester already tried to cancel, and (since the request
+// list already filters out empty drafts) leave an invisible orphaned row
+// in the database if they didn't notice. This used to be a ref local to
+// this component, set from its own unmount-cleanup effect -- but that
+// cleanup also runs during React Strict Mode's dev-only synthetic
+// unmount/remount of every component on initial mount, which permanently
+// marked every draft "closed" (and therefore deleted) the instant it was
+// created, in development only -- found by the create flow silently
+// failing in local testing right after this landed. A ref that's only
+// ever set by a genuine close event, owned above this component, isn't
+// affected by that.
+function CreateStep({
+  onCreated,
+  onClose,
+  closedRef,
+}: {
+  onCreated: (data: DraftRequestView) => void;
+  onClose: () => void;
+  closedRef: React.RefObject<boolean>;
+}) {
   const [requestType, setRequestType] = useState<RequestTypeValue | "">("");
   const [ministryType, setMinistryType] = useState<MinistryTypeValue | "">("");
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
-  // The X/Escape/backdrop close isn't gated by isPending (unlike the
-  // Continue button), so a fast close while createDraftRequestForDrawerAction
-  // is still in flight is reachable: the drawer fully unmounts (RequestsTable
-  // resets `creating`), but the in-flight promise keeps running regardless
-  // and, on resolving, would otherwise still call onCreated -- which
-  // reopens the drawer on a request the requester just tried to cancel,
-  // and (since RequestsTable's own listing already filters out empty
-  // drafts) leaves an invisible orphaned row in the database if it
-  // doesn't. Tracked here rather than fixed by disabling the close button
-  // during creation, so closing stays responsive even if creation is slow.
-  const cancelledRef = useRef(false);
-  useEffect(() => {
-    return () => {
-      cancelledRef.current = true;
-    };
-  }, []);
 
   function handleContinue() {
     if (!requestType || !ministryType) return;
@@ -245,7 +282,7 @@ function CreateStep({ onCreated }: { onCreated: (data: DraftRequestView) => void
     startTransition(async () => {
       try {
         const result = await createDraftRequestForDrawerAction(requestType, ministryType);
-        if (cancelledRef.current) {
+        if (closedRef.current) {
           if (result.ok && result.id) void deleteRequestAction(result.id);
           return;
         }
@@ -266,7 +303,7 @@ function CreateStep({ onCreated }: { onCreated: (data: DraftRequestView) => void
           setError(result.error ?? "Something went wrong.");
         }
       } catch (err) {
-        if (!cancelledRef.current) setError(err instanceof Error ? err.message : "Something went wrong.");
+        if (!closedRef.current) setError(err instanceof Error ? err.message : "Something went wrong.");
       }
     });
   }
@@ -317,7 +354,8 @@ function CreateStep({ onCreated }: { onCreated: (data: DraftRequestView) => void
         </select>
       </div>
       {error && <ErrorBanner message={error} />}
-      <div className="flex justify-end">
+      <div className="flex justify-between">
+        <CloseButton onClose={onClose} />
         <button
           type="button"
           disabled={isPending || !requestType || !ministryType}
@@ -605,14 +643,17 @@ function EditContent({ data, onClose }: { data: DraftRequestView; onClose: () =>
       <div className="flex flex-col gap-3 border-t border-slate-200 pt-4">
         <SignaturePad sigPadRef={sigPadRef} />
         {submitError && <ErrorBanner message={submitError} />}
-        <button
-          type="button"
-          disabled={isSubmitPending}
-          onClick={handleSubmitClick}
-          className="self-start rounded-md bg-teal-600 px-4 py-2 text-sm font-semibold text-white hover:bg-teal-700 disabled:opacity-60"
-        >
-          {data.returnReason ? "Resubmit" : "Submit"}
-        </button>
+        <div className="flex justify-between">
+          <CloseButton onClose={onClose} />
+          <button
+            type="button"
+            disabled={isSubmitPending}
+            onClick={handleSubmitClick}
+            className="rounded-md bg-teal-600 px-4 py-2 text-sm font-semibold text-white hover:bg-teal-700 disabled:opacity-60"
+          >
+            {data.returnReason ? "Resubmit" : "Submit"}
+          </button>
+        </div>
       </div>
 
       {showConfirm && (
@@ -746,7 +787,8 @@ function CreateWizard({ data, onClose }: { data: DraftRequestView; onClose: () =
             requestType={data.requestType}
             ministryType={data.ministryType}
           />
-          <div className="flex justify-end">
+          <div className="flex justify-between">
+            <CloseButton onClose={onClose} />
             <button
               type="button"
               onClick={goNext}
@@ -770,7 +812,10 @@ function CreateWizard({ data, onClose }: { data: DraftRequestView; onClose: () =
           </div>
           <div className="flex flex-col gap-2">
             <div className="flex justify-between">
-              {backButton}
+              <div className="flex gap-3">
+                {backButton}
+                <CloseButton onClose={onClose} />
+              </div>
               <button
                 type="button"
                 disabled={!canContinueFromExpenses}
@@ -796,7 +841,10 @@ function CreateWizard({ data, onClose }: { data: DraftRequestView; onClose: () =
           <BankDetailsManager requestId={data.id} bankDetails={data.bankDetails} />
           <div className="flex flex-col gap-2">
             <div className="flex justify-between">
-              {backButton}
+              <div className="flex gap-3">
+                {backButton}
+                <CloseButton onClose={onClose} />
+              </div>
               <button
                 type="button"
                 disabled={!canContinueFromPayment}
@@ -820,7 +868,10 @@ function CreateWizard({ data, onClose }: { data: DraftRequestView; onClose: () =
             <SignaturePad sigPadRef={sigPadRef} />
             {submitError && <ErrorBanner message={submitError} />}
             <div className="flex justify-between">
-              {backButton}
+              <div className="flex gap-3">
+                {backButton}
+                <CloseButton onClose={onClose} />
+              </div>
               <button
                 type="button"
                 disabled={isSubmitPending}
