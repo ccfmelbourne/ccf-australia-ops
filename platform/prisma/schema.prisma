@@ -173,6 +173,12 @@ model Receipt {
   // both render the same "add manually" state on the receipt's card, no
   // separate boolean needed.
   extractedMerchant      String?
+  // The product bought, when the scan could isolate exactly one product
+  // line -- null for multi-item receipts (see parseItemDescription).
+  // Combined with extractedMerchant as "<merchant> | <item>" wherever the
+  // two are shown together (the receipt card, the auto-created LineItem
+  // description, and therefore the voucher PDF).
+  extractedItem          String?
   extractedAmount        Decimal?             @db.Decimal(12, 2)
   scannedAt              DateTime?
 }

@@ -59,7 +59,8 @@ export function ReceiptCard({
         <span className="truncate font-mono text-xs text-slate-600">{receipt.filename}</span>
         {receipt.scannedAt ? (
           <p className="text-xs text-slate-700">
-            {receipt.extractedMerchant} ·{" "}
+            {receipt.extractedMerchant}
+            {receipt.extractedItem ? ` | ${receipt.extractedItem}` : ""} ·{" "}
             <span className="font-mono font-semibold">${receipt.extractedAmount}</span>
             <br />
             <span className="font-medium text-teal-700">✓ Scanned</span>

@@ -49,6 +49,7 @@ export interface DraftReceiptView {
   // covers both "not scanned yet" and "scanned but nothing usable came
   // back," which the UI renders the same way ("add manually").
   extractedMerchant: string | null;
+  extractedItem: string | null;
   extractedAmount: string | null; // formatted
   scannedAt: string | null; // ISO date
 }
@@ -260,6 +261,7 @@ export async function getDraftRequest(
       uploadedAt: rec.uploadedAt.toISOString(),
       viewUrl: await getReceiptDownloadUrl(rec.storageKey),
       extractedMerchant: rec.extractedMerchant,
+      extractedItem: rec.extractedItem,
       extractedAmount: rec.extractedAmount ? formatAmount(rec.extractedAmount) : null,
       scannedAt: rec.scannedAt ? rec.scannedAt.toISOString() : null,
     })),
@@ -870,7 +872,7 @@ export async function addReceiptRecord(
   requestId: string,
   requesterId: string,
   storageKey: string,
-  extraction?: { merchant: string; amount: number } | null,
+  extraction?: { merchant: string; amount: number; item: string | null } | null,
 ): Promise<{ id: string }> {
   await assertRequestIsEditable(requestId, requesterId);
   const receipt = await prisma.receipt.create({
@@ -878,6 +880,7 @@ export async function addReceiptRecord(
       reimbursementRequestId: requestId,
       storageKey,
       extractedMerchant: extraction?.merchant ?? null,
+      extractedItem: extraction?.item ?? null,
       extractedAmount: extraction?.amount ?? null,
       scannedAt: extraction ? new Date() : null,
     },

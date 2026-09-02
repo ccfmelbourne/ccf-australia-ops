@@ -226,10 +226,12 @@ export async function uploadAndScanReceiptAction(
     await uploadReceipt(storageKey, buffer, file.type);
 
     let merchant: string | null = null;
+    let item: string | null = null;
     let amount: number | null = null;
     try {
       const result = await receiptExtractionService.extract({ buffer, contentType: file.type });
       merchant = result.merchant?.trim() || null;
+      item = result.item?.trim() || null;
       amount = result.amount;
     } catch {
       // Scanning is a nicety layered on top of a successful upload -- an
@@ -237,10 +239,19 @@ export async function uploadAndScanReceiptAction(
       // the upload, it just leaves this receipt unscanned.
     }
     const usable = merchant !== null && amount !== null && amount > 0;
+    // "<merchant> | <item>" when a single product line could be isolated,
+    // otherwise the merchant name alone -- the auto-created line item
+    // should read as what was bought, not just where.
+    const description = item ? `${merchant} | ${item}` : merchant!;
 
-    await addReceiptRecord(requestId, userId, storageKey, usable ? { merchant: merchant!, amount: amount! } : null);
+    await addReceiptRecord(
+      requestId,
+      userId,
+      storageKey,
+      usable ? { merchant: merchant!, amount: amount!, item } : null,
+    );
     if (usable) {
-      await addLineItem(requestId, userId, merchant!, amount!);
+      await addLineItem(requestId, userId, description, amount!);
     }
     return { ok: true };
   } catch (err) {

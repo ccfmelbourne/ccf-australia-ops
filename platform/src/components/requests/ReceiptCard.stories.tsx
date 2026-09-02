@@ -48,6 +48,7 @@ export const Extracted: Story = {
           uploadedAt: new Date().toISOString(),
           viewUrl: "#",
           extractedMerchant: "Silver Top Taxis",
+          extractedItem: "Airport transfer",
           extractedAmount: "45.20",
           scannedAt: new Date().toISOString(),
         }}
@@ -69,6 +70,7 @@ export const ScanIncomplete: Story = {
           uploadedAt: new Date().toISOString(),
           viewUrl: "#",
           extractedMerchant: null,
+          extractedItem: null,
           extractedAmount: null,
           scannedAt: null,
         }}
