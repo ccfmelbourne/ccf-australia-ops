@@ -20,9 +20,14 @@ export interface ReceiptInput {
 
 export interface ReceiptExtractionResult {
   merchant: string | null;
+  // The product bought, when exactly one product line could be isolated
+  // between the merchant and the totals section -- null for multi-item
+  // receipts, where guessing a single product name would misrepresent the
+  // purchase (see parseItemDescription). Callers combine this with
+  // merchant as "<merchant> | <item>" wherever the two are shown together.
+  item: string | null;
   date: string | null; // ISO yyyy-mm-dd, if a date could be parsed
   amount: number | null; // total, AUD
-  gst: number | null;
   rawText: string;
 }
 

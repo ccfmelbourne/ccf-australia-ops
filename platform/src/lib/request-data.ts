@@ -49,6 +49,7 @@ export interface DraftReceiptView {
   // covers both "not scanned yet" and "scanned but nothing usable came
   // back," which the UI renders the same way ("add manually").
   extractedMerchant: string | null;
+  extractedItem: string | null;
   extractedAmount: string | null; // formatted
   scannedAt: string | null; // ISO date
 }
@@ -170,8 +171,18 @@ async function nextVoucherNo(): Promise<string> {
   // interactive transaction needed just to read it.
   const rows =
     await prisma.$queryRaw<{ nextval: bigint }[]>`SELECT nextval('voucher_no_seq') AS nextval`;
-  const year = new Date().getFullYear();
-  return `DV-${year}-${rows[0].nextval.toString().padStart(4, "0")}`;
+  const now = new Date();
+  const yyyy = now.getFullYear();
+  const mm = String(now.getMonth() + 1).padStart(2, "0");
+  const dd = String(now.getDate()).padStart(2, "0");
+  // Prefix changed from "DV-" to "CCF-" and the date component from
+  // year-only to a full YYYYMMDD (2026-09-02, confirmed with the
+  // decision-maker) -- the sequence itself is still one single org-wide
+  // running number, not reset per day, so this doesn't imply a per-day
+  // count; it's just a more specific date stamped onto the same sequence.
+  // Existing "DV-2026-####" vouchers already issued keep their original
+  // numbers -- this only changes the format for new ones going forward.
+  return `CCF-${yyyy}${mm}${dd}-${rows[0].nextval.toString().padStart(4, "0")}`;
 }
 
 export async function createDraftRequest(
@@ -250,6 +261,7 @@ export async function getDraftRequest(
       uploadedAt: rec.uploadedAt.toISOString(),
       viewUrl: await getReceiptDownloadUrl(rec.storageKey),
       extractedMerchant: rec.extractedMerchant,
+      extractedItem: rec.extractedItem,
       extractedAmount: rec.extractedAmount ? formatAmount(rec.extractedAmount) : null,
       scannedAt: rec.scannedAt ? rec.scannedAt.toISOString() : null,
     })),
@@ -860,7 +872,7 @@ export async function addReceiptRecord(
   requestId: string,
   requesterId: string,
   storageKey: string,
-  extraction?: { merchant: string; amount: number } | null,
+  extraction?: { merchant: string; amount: number; item: string | null } | null,
 ): Promise<{ id: string }> {
   await assertRequestIsEditable(requestId, requesterId);
   const receipt = await prisma.receipt.create({
@@ -868,6 +880,7 @@ export async function addReceiptRecord(
       reimbursementRequestId: requestId,
       storageKey,
       extractedMerchant: extraction?.merchant ?? null,
+      extractedItem: extraction?.item ?? null,
       extractedAmount: extraction?.amount ?? null,
       scannedAt: extraction ? new Date() : null,
     },

@@ -1,9 +1,16 @@
 import { Document, Page, View, Text, Image, StyleSheet, renderToBuffer } from "@react-pdf/renderer";
 import { PDFDocument } from "pdf-lib";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { REQUEST_TYPES, REQUEST_TYPE_LABELS, MINISTRY_TYPE_LABELS } from "@/lib/request-types";
 import { getApproverRoleLabel } from "@/lib/approval-routing";
 import type { ApproverRoleValue } from "@/lib/approval-routing";
 import type { ApprovedRequestDetail, ApproverDirectory } from "@/lib/request-data";
+
+// 800x400 (2:1), downscaled from the org's original 8000x4000 source --
+// plenty of resolution for the ~110x55pt header render, without baking an
+// unnecessarily large image into every generated voucher PDF.
+const logoBuffer = readFileSync(join(process.cwd(), "public", "ccfmelbourne-logo.png"));
 
 // The official Finance-facing document for an approved request -- once
 // Finance no longer logs into the app, this PDF (not the email body, not a
@@ -16,8 +23,12 @@ import type { ApprovedRequestDetail, ApproverDirectory } from "@/lib/request-dat
 // Approval Limit tier legend, and a live Ministry->Overseer directory.
 // Deliberately dropped from the real form: the WEST/NORTH region checkboxes
 // (no region concept exists anywhere in this app's data model -- adding one
-// would be a real new feature, not a formatting change) and the "If paid in
-// cash" section (this app only ever captures bank transfer details).
+// would be a real new feature, not a formatting change). The "If paid in
+// cash" section IS included (added back 2026-09-02, per the decision-maker
+// comparing against the real form) even though this app only ever captures
+// bank transfer details -- it's printed as blank lines for Finance to fill
+// in by hand for the rare case they actually pay in cash, not backed by any
+// app data.
 // @react-pdf/renderer has no real HTML <table> or checkbox input -- rows and
 // checkboxes below are plain flexbox Views styled to look like them.
 //
@@ -53,7 +64,7 @@ const styles = StyleSheet.create({
   page: { padding: 32, fontSize: 9, fontFamily: "Helvetica" },
 
   topRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10 },
-  orgName: { fontSize: 14, fontFamily: "Helvetica-Bold" },
+  logo: { width: 110, height: 55 },
   topRight: { alignItems: "flex-end" },
   topRightLine: { fontSize: 9, marginBottom: 2 },
 
@@ -108,6 +119,16 @@ const styles = StyleSheet.create({
 
   fieldLabel: { color: "#666666", fontSize: 8 },
   fieldValue: { fontSize: 9, marginBottom: 6 },
+  cashAdvanceNote: { fontSize: 7, color: "#666666", marginTop: 2, marginBottom: 6 },
+
+  cashPaidRow: { flexDirection: "row", justifyContent: "space-between" },
+  cashPaidLabel: { fontSize: 8, marginBottom: 4 },
+  cashPaidSubmitNote: {
+    fontSize: 8,
+    fontFamily: "Helvetica-Bold",
+    textAlign: "center",
+    marginTop: 8,
+  },
 
   approvalRow: { flexDirection: "row" },
   approvalCol: { flex: 1, paddingRight: 8, alignItems: "flex-start" },
@@ -118,6 +139,12 @@ const styles = StyleSheet.create({
   approvalDate: { fontSize: 7, color: "#666666" },
 
   legendLine: { fontSize: 8, marginBottom: 2 },
+  // 2 columns, not stacked -- 4 tier rules split evenly into 2 rows x 2
+  // cols (no odd leftover the way 3 columns would give with 4 items), and
+  // each column is wide enough (~half the page) that even the longest
+  // rule stays on one line rather than wrapping.
+  legendGrid: { flexDirection: "row", flexWrap: "wrap" },
+  legendCell: { width: "50%", paddingRight: 8 },
 
   directoryGrid: { flexDirection: "row", flexWrap: "wrap" },
   directoryCard: {
@@ -146,6 +173,19 @@ function formatDecidedAt(iso: string | null): string {
   return new Date(iso).toLocaleString("en-AU", { dateStyle: "medium", timeStyle: "short" });
 }
 
+// Shrinks line-item rows as the list grows, raising how many fit on page 1
+// before A4's ~258pt item budget (see the module comment's page-height
+// analysis) forces an overflow to page 2 -- roughly 14 rows at the default
+// size, up to roughly 25 at the smallest tier, rather than a fixed row
+// height that always overflows past ~14 items regardless of how short each
+// description is.
+function lineItemDensity(count: number): { fontSize: number; paddingVertical: number } {
+  if (count <= 14) return { fontSize: 9, paddingVertical: 4 };
+  if (count <= 20) return { fontSize: 8, paddingVertical: 3 };
+  if (count <= 30) return { fontSize: 7, paddingVertical: 2 };
+  return { fontSize: 6, paddingVertical: 1.5 };
+}
+
 function Checkbox({ checked, label }: { checked: boolean; label: string }) {
   return (
     <View style={styles.checkboxItem} wrap={false}>
@@ -169,12 +209,14 @@ export function VoucherDocument({
   requesterSignature: Buffer | null;
 }) {
   const generatedAt = new Date().toLocaleString("en-AU", { dateStyle: "medium", timeStyle: "short" });
+  const density = lineItemDensity(detail.lineItems.length);
 
   return (
     <Document>
       <Page size="A4" style={styles.page}>
         <View style={styles.topRow}>
-          <Text style={styles.orgName}>CCF AUSTRALIA - MELBOURNE</Text>
+          {/* eslint-disable-next-line jsx-a11y/alt-text -- this is @react-pdf/renderer's PDF-drawing Image, not an HTML <img>; it has no alt prop */}
+          <Image src={{ data: logoBuffer, format: "png" }} style={styles.logo} />
           <View style={styles.topRight}>
             <Text style={styles.topRightLine}>VOUCHER NO.: {detail.voucherNo}</Text>
             <Text style={styles.topRightLine}>DATE: {formatDate(detail.submittedAt)}</Text>
@@ -198,9 +240,13 @@ export function VoucherDocument({
                 <Text style={[styles.tableHeaderCell, styles.amountCell]}>Amount</Text>
               </View>
               {detail.lineItems.map((li, i) => (
-                <View style={styles.row} key={i} wrap={false}>
-                  <Text style={styles.descCell}>{li.description}</Text>
-                  <Text style={styles.amountCell}>${li.amount}</Text>
+                <View
+                  style={[styles.row, { paddingVertical: density.paddingVertical }]}
+                  key={i}
+                  wrap={false}
+                >
+                  <Text style={[styles.descCell, { fontSize: density.fontSize }]}>{li.description}</Text>
+                  <Text style={[styles.amountCell, { fontSize: density.fontSize }]}>${li.amount}</Text>
                 </View>
               ))}
               <View style={styles.totalRow} wrap={false}>
@@ -221,6 +267,10 @@ export function VoucherDocument({
           <View style={styles.twoCol}>
             <View style={styles.mainCol}>
               <Text style={styles.sectionTitle}>Requisitioned By</Text>
+              <Text style={styles.cashAdvanceNote}>
+                For Cash Advances (CA), the requisitioner agrees to liquidate the CA, with
+                relevant invoices, not later than one (1) month from the date of this voucher.
+              </Text>
               <Text style={styles.fieldValue}>{detail.requesterName}</Text>
               {requesterSignature ? (
                 // eslint-disable-next-line jsx-a11y/alt-text -- this is @react-pdf/renderer's PDF-drawing Image, not an HTML <img>; it has no alt prop
@@ -293,13 +343,32 @@ export function VoucherDocument({
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Approval Limit</Text>
           <Text style={styles.legendLine}>Note: no breaking of total amount for less approval.</Text>
-          <Text style={styles.legendLine}>{"<="}$500 — Ministry Overseer</Text>
-          <Text style={styles.legendLine}>{">"}$500 to $2,000 — Ministry Overseer + 1 COS</Text>
-          <Text style={styles.legendLine}>{">"}$2,000 to $5,000 — 2 COS + Finance Overseer</Text>
-          <Text style={styles.legendLine}>{">"}$5,000 — 2 COS + Finance Overseer + Regional Director</Text>
+          <View style={styles.legendGrid}>
+            <Text style={[styles.legendLine, styles.legendCell]}>{"<="}$500 — Ministry Overseer</Text>
+            <Text style={[styles.legendLine, styles.legendCell]}>
+              {">"}$500 to $2,000 — Ministry Overseer + 1 COS
+            </Text>
+            <Text style={[styles.legendLine, styles.legendCell]}>
+              {">"}$2,000 to $5,000 — 2 COS + Finance Overseer
+            </Text>
+            <Text style={[styles.legendLine, styles.legendCell]}>
+              {">"}$5,000 — 2 COS + Finance Overseer + Regional Director
+            </Text>
+          </View>
         </View>
 
         <MinistryOverseerDirectory directory={detail.approverDirectory} />
+
+        <View style={styles.section} wrap={false}>
+          <Text style={styles.cashPaidLabel}>If paid in cash.</Text>
+          <View style={styles.cashPaidRow}>
+            <Text style={styles.fieldLabel}>Cash Released by/date: ________________________</Text>
+            <Text style={styles.fieldLabel}>Cash Received by/date: ________________________</Text>
+          </View>
+          <Text style={styles.cashPaidSubmitNote}>
+            PLEASE SUBMIT DULY APPROVED FORM TO DISBURSEMENT OFFICER FOR VERIFICATION AND PAYMENT
+          </Text>
+        </View>
 
         {unembeddableReceiptFilenames.length > 0 && (
           <View style={styles.section}>

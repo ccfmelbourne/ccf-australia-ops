@@ -9,6 +9,7 @@ import { REQUEST_TYPE_LABELS, MINISTRY_TYPE_LABELS } from "@/lib/request-types";
 import { getApproverRoleLabel } from "@/lib/approval-routing";
 import { RequestStatusBadge } from "@/components/RequestStatusBadge";
 import { MoneyStat } from "@/components/MoneyStat";
+import { SectionHeading } from "@/components/SectionHeading";
 import type { PendingApprovalView } from "@/lib/approval-data";
 
 // Same native-<dialog> side-panel pattern as RequestDrawer.tsx -- gives a
@@ -112,68 +113,66 @@ export function ApprovalDrawer({
       <div className="flex flex-col gap-6 pt-4">
         <MoneyStat label="Total amount" amount={approval.totalAmount} />
 
-        <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-2 text-sm">
-          <dt className="text-slate-500">Requester</dt>
-          <dd>{approval.requesterName}</dd>
-          <dt className="text-slate-500">Type</dt>
-          <dd>{REQUEST_TYPE_LABELS[approval.requestType]}</dd>
-          <dt className="text-slate-500">Ministry</dt>
-          <dd>{MINISTRY_TYPE_LABELS[approval.ministryType]}</dd>
-          <dt className="text-slate-500">Your role</dt>
-          <dd>{getApproverRoleLabel(approval.role, approval.ministryType)}</dd>
-        </dl>
+        <div className="flex flex-col divide-y divide-slate-200">
+          <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-2 pb-6 text-sm">
+            <dt className="text-slate-500">Requester</dt>
+            <dd>{approval.requesterName}</dd>
+            <dt className="text-slate-500">Type</dt>
+            <dd>{REQUEST_TYPE_LABELS[approval.requestType]}</dd>
+            <dt className="text-slate-500">Ministry</dt>
+            <dd>{MINISTRY_TYPE_LABELS[approval.ministryType]}</dd>
+            <dt className="text-slate-500">Your role</dt>
+            <dd>{getApproverRoleLabel(approval.role, approval.ministryType)}</dd>
+          </dl>
 
-        <div>
-          <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
-            Line items
-          </p>
-          {approval.lineItems.length === 0 ? (
-            <p className="text-sm text-slate-500">None.</p>
-          ) : (
-            <ul className="text-sm">
-              {approval.lineItems.map((li, i) => (
-                <li key={i} className="flex justify-between border-b border-slate-100 py-1">
-                  <span>{li.description}</span>
-                  <span className="font-mono">${li.amount}</span>
+          <div className="py-6">
+            <SectionHeading>Line items</SectionHeading>
+            {approval.lineItems.length === 0 ? (
+              <p className="text-sm text-slate-500">None.</p>
+            ) : (
+              <ul className="text-sm">
+                {approval.lineItems.map((li, i) => (
+                  <li key={i} className="flex justify-between border-b border-slate-100 py-1">
+                    <span>{li.description}</span>
+                    <span className="font-mono">${li.amount}</span>
+                  </li>
+                ))}
+                <li className="flex justify-between border-t-2 border-slate-300 py-1.5 font-semibold">
+                  <span>Total</span>
+                  <span className="font-mono">${approval.totalAmount}</span>
                 </li>
-              ))}
-              <li className="flex justify-between border-t-2 border-slate-300 py-1.5 font-semibold">
-                <span>Total</span>
-                <span className="font-mono">${approval.totalAmount}</span>
-              </li>
-            </ul>
-          )}
-        </div>
+              </ul>
+            )}
+          </div>
 
-        <div>
-          <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
-            Receipts
-          </p>
-          {approval.receipts.length === 0 ? (
-            <p className="text-sm text-slate-500">None attached.</p>
-          ) : (
-            <ul className="flex flex-col gap-1">
-              {approval.receipts.map((r, i) => (
-                <li
-                  key={i}
-                  className="flex items-center justify-between rounded-md border border-slate-200 px-3 py-2 text-sm"
-                >
-                  <span className="truncate font-mono text-slate-700">{r.filename}</span>
-                  {/* Signed URL, computed server-side at render time -- lets
-                      an approver check a receipt against the line-item list
-                      before deciding, not just see a count. */}
-                  <a
-                    href={r.viewUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="-m-1 shrink-0 p-1 text-teal-700 hover:underline"
+          <div className="pt-6">
+            <SectionHeading>Receipts</SectionHeading>
+            {approval.receipts.length === 0 ? (
+              <p className="text-sm text-slate-500">None attached.</p>
+            ) : (
+              <ul className="flex flex-col gap-1">
+                {approval.receipts.map((r, i) => (
+                  <li
+                    key={i}
+                    className="flex items-center justify-between rounded-md border border-slate-200 px-3 py-2 text-sm"
                   >
-                    View
-                  </a>
-                </li>
-              ))}
-            </ul>
-          )}
+                    <span className="truncate font-mono text-slate-700">{r.filename}</span>
+                    {/* Signed URL, computed server-side at render time -- lets
+                        an approver check a receipt against the line-item list
+                        before deciding, not just see a count. */}
+                    <a
+                      href={r.viewUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="-m-1 shrink-0 p-1 text-teal-700 hover:underline"
+                    >
+                      View
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
         </div>
 
         <div className="flex flex-col gap-1">

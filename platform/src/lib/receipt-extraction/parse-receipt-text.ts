@@ -143,18 +143,92 @@ export function parseTotalAmount(text: string): number | null {
   return largest;
 }
 
-export function parseGst(text: string): number | null {
-  const lines = text.split("\n");
-  const sameLine = findAmountOnSameLine(lines, /\bgst\b/i);
-  if (sameLine !== null) return sameLine;
-  return pairColumnLabelsWithAmounts(lines).get("gst") ?? null;
+function stripTrailingMoney(line: string): string {
+  return line.replace(new RegExp(`${MONEY.source}\\s*$`), "").trim();
+}
+
+// A line matching an explicit "Items" section header some POS receipts
+// print above the product list (optionally with its own "$" amount-column
+// header) -- when present, it's a more reliable start-of-items marker than
+// "right after the merchant name", since that gap can otherwise include
+// address/phone/ABN/invoice-type boilerplate that isn't part of any item.
+const ITEMS_HEADER = /^items?(\s*\$)?$/i;
+
+// Lines that are never part of a product's name, so they're dropped
+// entirely rather than folded into the item description: a bare date, ABN,
+// or SKU/product code (digits only), a line that's *only* a dollar amount
+// (MONEY_ONLY, anchored -- unlike parseMerchant's unanchored MONEY.test,
+// this deliberately does NOT flag a line that mixes real product text with
+// a trailing price, e.g. "Timber pack   $79.48": that line stays and just
+// has its trailing money stripped below), a lone currency symbol or other
+// punctuation-only column-header remnant, or a receipt-boilerplate label.
+const SKU_ONLY = /^\d{3,}$/;
+const SYMBOLS_ONLY = /^[^a-zA-Z0-9]*$/;
+const RECEIPT_BOILERPLATE = /^(tax\s+invoice|invoice|receipt|items?|description)\s*:?$/i;
+
+function isNoiseLine(line: string): boolean {
+  return (
+    parseDate(line) !== null ||
+    /\babn\b/i.test(line) ||
+    /^\d[\d\s]{9,}$/.test(line) ||
+    MONEY_ONLY.test(line) ||
+    SKU_ONLY.test(line) ||
+    SYMBOLS_ONLY.test(line) ||
+    RECEIPT_BOILERPLATE.test(line)
+  );
+}
+
+// The product bought, isolated from the block of lines between the
+// merchant (or an explicit "Items" header, when the receipt prints one)
+// and the totals section (SUBTOTAL/GST/TOTAL). Real POS receipts often
+// wrap a product name across several lines and print its price on a line
+// of its own -- not always alongside the name on one line -- so this
+// collects every non-noise line in that block rather than requiring a
+// single text+price line. Only returned when the block contains exactly
+// one distinct dollar amount: a receipt with several items still collapses
+// to one line item at the receipt's total (see uploadAndScanReceiptAction),
+// so more than one amount means more than one product, and guessing a
+// single name out of several would misrepresent the purchase -- null is
+// the safer result there, leaving the description as the merchant name
+// alone.
+export function parseItemDescription(text: string): string | null {
+  const lines = text
+    .split("\n")
+    .map((l) => l.trim())
+    .filter((l) => l.length > 0);
+  const merchantIndex = lines.findIndex((l) => !looksLikeDateOrAmountOrAbn(l));
+  if (merchantIndex === -1) return null;
+
+  const itemsHeaderIndex = lines.findIndex((l, i) => i > merchantIndex && ITEMS_HEADER.test(l));
+  const blockStart = itemsHeaderIndex === -1 ? merchantIndex + 1 : itemsHeaderIndex + 1;
+  const totalsIndex = lines.findIndex(
+    (l, i) => i >= blockStart && /(sub\s*-?\s*total|gst|total)/i.test(l),
+  );
+  const block = lines.slice(blockStart, totalsIndex === -1 ? lines.length : totalsIndex);
+
+  const amounts = new Set<number>();
+  for (const line of block) {
+    for (const match of line.matchAll(new RegExp(MONEY, "g"))) {
+      amounts.add(toNumber(match[1]));
+    }
+  }
+  if (amounts.size !== 1) return null;
+
+  const description = block
+    .filter((line) => !isNoiseLine(line))
+    .map((line) => (MONEY.test(line) ? stripTrailingMoney(line) : line))
+    .filter((line) => line.length > 0)
+    .join(" ")
+    .replace(/^\*+\s*/, "")
+    .trim();
+  return description.length > 0 ? description : null;
 }
 
 export function parseReceiptText(text: string): Omit<ReceiptExtractionResult, "rawText"> {
   return {
     merchant: parseMerchant(text),
+    item: parseItemDescription(text),
     date: parseDate(text),
     amount: parseTotalAmount(text),
-    gst: parseGst(text),
   };
 }

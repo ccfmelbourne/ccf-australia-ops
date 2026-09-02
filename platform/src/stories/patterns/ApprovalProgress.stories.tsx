@@ -61,7 +61,7 @@ function ApprovalProgressPattern({ variant }: { variant: Variant }) {
           <p className="max-w-xs text-sm text-slate-600">
             All required approvals are complete. Finance will now process your request.
           </p>
-          <p className="mt-1 font-mono text-xs text-slate-500">Voucher #DV-2026-0123</p>
+          <p className="mt-1 font-mono text-xs text-slate-500">Voucher #CCF-20260902-0123</p>
         </div>
       )}
 

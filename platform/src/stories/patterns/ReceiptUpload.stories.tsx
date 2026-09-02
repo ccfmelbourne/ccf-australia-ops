@@ -41,6 +41,7 @@ function ReceiptUploadPattern() {
               uploadedAt: new Date().toISOString(),
               viewUrl: "#",
               extractedMerchant: "Silver Top Taxis",
+              extractedItem: "Airport transfer",
               extractedAmount: "45.20",
               scannedAt: new Date().toISOString(),
             }}
