@@ -4,13 +4,10 @@ import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { uploadAndScanReceiptAction, removeReceiptAction } from "@/app/requests/actions";
 import { ErrorBanner } from "@/components/ErrorBanner";
+import { ReceiptProcessingCard, ReceiptCard } from "./ReceiptCard";
 import type { DraftReceiptView } from "@/lib/request-data";
 
 const ACCEPTED_TYPES = ".pdf,.jpg,.jpeg,.png,.heic";
-
-function isImageFilename(filename: string): boolean {
-  return /\.(jpe?g|png)$/i.test(filename);
-}
 
 interface ProcessingFile {
   tempId: string;
@@ -156,63 +153,15 @@ export function ReceiptManager({
           </p>
           <div className="grid grid-cols-2 gap-3">
             {processing.map((p) => (
-              <div
-                key={p.tempId}
-                className="flex flex-col gap-2 rounded-md border border-slate-200 p-3"
-              >
-                <span className="truncate text-xs font-mono text-slate-600">{p.filename}</span>
-                <p className="text-xs text-slate-500">
-                  {p.status === "uploading" ? "Uploading…" : "Scanning receipt…"}
-                </p>
-                <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-200">
-                  <div className="h-full w-2/3 animate-pulse rounded-full bg-teal-500" />
-                </div>
-                {p.status === "scanning" && (
-                  <p className="text-xs text-slate-500">Extracting merchant, date, and amount…</p>
-                )}
-              </div>
+              <ReceiptProcessingCard key={p.tempId} filename={p.filename} status={p.status} />
             ))}
             {receipts.map((r) => (
-              <div key={r.id} className="flex flex-col overflow-hidden rounded-md border border-slate-200">
-                <div className="flex h-24 items-center justify-center bg-slate-50">
-                  {isImageFilename(r.filename) ? (
-                    // eslint-disable-next-line @next/next/no-img-element -- a signed R2 URL, not a local/optimizable asset
-                    <img src={r.viewUrl} alt="" className="h-full w-full object-cover" />
-                  ) : (
-                    <span aria-hidden className="text-3xl text-slate-400">📄</span>
-                  )}
-                </div>
-                <div className="flex flex-col gap-1 p-2">
-                  <span className="truncate font-mono text-xs text-slate-600">{r.filename}</span>
-                  {r.scannedAt ? (
-                    <p className="text-xs text-slate-700">
-                      {r.extractedMerchant} · <span className="font-mono font-semibold">${r.extractedAmount}</span>
-                      <br />
-                      <span className="font-medium text-teal-700">✓ Scanned</span>
-                    </p>
-                  ) : (
-                    <p className="text-xs text-slate-500">Scan incomplete — add manually</p>
-                  )}
-                  <div className="flex gap-3 pt-1 text-xs">
-                    <a
-                      href={r.viewUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="-m-1 p-1 text-teal-700 hover:underline"
-                    >
-                      View
-                    </a>
-                    <button
-                      type="button"
-                      disabled={isPending}
-                      onClick={() => handleRemove(r.id)}
-                      className="-m-1 p-1 text-red-600 hover:underline disabled:opacity-60"
-                    >
-                      Remove
-                    </button>
-                  </div>
-                </div>
-              </div>
+              <ReceiptCard
+                key={r.id}
+                receipt={r}
+                onRemove={() => handleRemove(r.id)}
+                isRemoving={isPending}
+              />
             ))}
           </div>
         </div>

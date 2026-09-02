@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { REQUEST_TYPE_LABELS, MINISTRY_TYPE_LABELS } from "@/lib/request-types";
 import { RequestStatusBadge } from "@/components/RequestStatusBadge";
+import { EmptyState } from "@/components/EmptyState";
 import { ApprovalDrawer } from "./ApprovalDrawer";
 import type { PendingApprovalView } from "@/lib/approval-data";
 
@@ -14,7 +15,7 @@ export function ApprovalsTable({ approvals }: { approvals: PendingApprovalView[]
       <h2 className="text-lg font-bold text-slate-900">Approvals</h2>
 
       {approvals.length === 0 ? (
-        <p className="text-sm text-slate-500">Nothing pending your approval.</p>
+        <EmptyState message="Nothing pending your approval." />
       ) : (
         <ul className="flex flex-col gap-2">
           {approvals.map((a) => (
