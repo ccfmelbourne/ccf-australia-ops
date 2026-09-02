@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import SignatureCanvas from "react-signature-canvas";
 import { Button } from "@/components/Button";
+import { CloseButton } from "@/components/requests/CloseButton";
 import { ErrorBanner } from "@/components/ErrorBanner";
 import { decideApprovalAction, requestChangesAction } from "@/app/approvals/actions";
 import { REQUEST_TYPE_LABELS, MINISTRY_TYPE_LABELS } from "@/lib/request-types";
@@ -86,11 +87,16 @@ export function ApprovalDrawer({
     <dialog
       ref={dialogRef}
       onClose={onClose}
-      onClick={(e) => {
-        if (e.target === dialogRef.current) handleClose();
-      }}
+      // Deliberately no backdrop-click-to-close, matching RequestDrawer's
+      // own decision -- an approver could have an unsaved signature or
+      // comment in progress, so a stray click near the edge shouldn't be
+      // able to lose it. The X and the bottom Close button stay as the
+      // only ways to dismiss it.
+      closedby="none"
       aria-labelledby="approval-drawer-title"
-      className="drawer-panel fixed inset-y-0 right-0 m-0 h-dvh w-full max-w-xl overflow-y-auto rounded-l-lg bg-white p-6 shadow-xl backdrop:bg-black/40"
+      // Opens from the left edge -- see RequestDrawer.tsx's own dialog for
+      // why rounded-r-lg, not rounded-l-lg.
+      className="drawer-panel fixed inset-y-0 left-0 m-0 h-dvh w-full max-w-xl overflow-y-auto rounded-r-lg bg-white p-6 shadow-xl backdrop:bg-black/40"
     >
       <div className="flex items-center justify-between border-b border-slate-200 pb-4">
         <span className="flex items-center gap-2">
@@ -208,16 +214,19 @@ export function ApprovalDrawer({
 
         {error && <ErrorBanner message={error} />}
 
-        <div className="flex gap-3">
-          <Button disabled={isPending} onClick={() => handleDecide("APPROVED")}>
-            {isPending ? "Saving…" : "Approve"}
-          </Button>
-          <Button variant="danger" disabled={isPending} onClick={() => handleDecide("REJECTED")}>
-            Reject
-          </Button>
-          <Button variant="warning" disabled={isPending} onClick={handleRequestChanges}>
-            Request Changes
-          </Button>
+        <div className="flex justify-between">
+          <CloseButton onClose={handleClose} />
+          <div className="flex gap-3">
+            <Button disabled={isPending} onClick={() => handleDecide("APPROVED")}>
+              {isPending ? "Saving…" : "Approve"}
+            </Button>
+            <Button variant="danger" disabled={isPending} onClick={() => handleDecide("REJECTED")}>
+              Reject
+            </Button>
+            <Button variant="warning" disabled={isPending} onClick={handleRequestChanges}>
+              Request Changes
+            </Button>
+          </div>
         </div>
       </div>
     </dialog>

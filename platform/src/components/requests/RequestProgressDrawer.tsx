@@ -6,6 +6,7 @@ import { getApproverRoleLabel } from "@/lib/approval-routing";
 import { RequestStatusBadge } from "@/components/RequestStatusBadge";
 import { MoneyStat } from "@/components/MoneyStat";
 import { SectionHeading } from "@/components/SectionHeading";
+import { CloseButton } from "./CloseButton";
 import type { RequestProgressView, RequestProgressApprovalView } from "@/lib/request-data";
 
 function formatDate(iso: string | null): string {
@@ -144,11 +145,15 @@ export function RequestProgressDrawer({
     <dialog
       ref={dialogRef}
       onClose={onClose}
-      onClick={(e) => {
-        if (e.target === dialogRef.current) handleClose();
-      }}
+      // Deliberately no backdrop-click-to-close, matching RequestDrawer's
+      // own decision -- the X (and the bottom Close button below the
+      // approval timeline, for when this scrolls) stay as the only ways
+      // to dismiss it.
+      closedby="none"
       aria-labelledby="progress-drawer-title"
-      className="drawer-panel fixed inset-y-0 right-0 m-0 h-dvh w-full max-w-xl overflow-y-auto rounded-l-lg bg-white p-6 shadow-xl backdrop:bg-black/40"
+      // Opens from the left edge -- see RequestDrawer.tsx's own dialog for
+      // why rounded-r-lg, not rounded-l-lg.
+      className="drawer-panel fixed inset-y-0 left-0 m-0 h-dvh w-full max-w-xl overflow-y-auto rounded-r-lg bg-white p-6 shadow-xl backdrop:bg-black/40"
     >
       <div className="flex items-center justify-between border-b border-slate-200 pb-4">
         <h2 id="progress-drawer-title" className="text-lg font-bold text-slate-900">
@@ -262,6 +267,10 @@ export function RequestProgressDrawer({
               regionalDirectorOverrideConfirmedAt={data.regionalDirectorOverrideConfirmedAt}
             />
           </div>
+        </div>
+
+        <div className="flex justify-end border-t border-slate-200 pt-4">
+          <CloseButton onClose={handleClose} />
         </div>
       </div>
     </dialog>

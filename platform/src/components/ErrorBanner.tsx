@@ -1,3 +1,5 @@
+import { Alert } from "@/components/Alert";
+
 // Shared inline error style, used anywhere a form/action can fail --
 // matches the visual language of RequestDrawer.tsx's amber "changes
 // requested"/"rejected" banner, just in red for an actual error. Always
@@ -5,9 +7,5 @@
 // native <dialog>, where a toast would render behind the dialog's top
 // layer and be invisible (see the memory on this).
 export function ErrorBanner({ message }: { message: string }) {
-  return (
-    <div role="alert" className="rounded-md border border-red-300 bg-red-50 p-3 text-sm text-red-700">
-      {message}
-    </div>
-  );
+  return <Alert tone="danger">{message}</Alert>;
 }

@@ -19,6 +19,7 @@ import type { RequestTypeValue, MinistryTypeValue } from "@/lib/request-types";
 import { LineItemManager } from "./LineItemManager";
 import { ReceiptManager } from "./ReceiptManager";
 import { BankDetailsManager } from "./BankDetailsManager";
+import { CloseButton } from "./CloseButton";
 import { Button } from "@/components/Button";
 import { ErrorBanner } from "@/components/ErrorBanner";
 import { RequestStatusBadge } from "@/components/RequestStatusBadge";
@@ -57,7 +58,7 @@ const SORTED_MINISTRY_TYPES = [...MINISTRY_TYPES].sort((a, b) =>
   MINISTRY_TYPE_LABELS[a].localeCompare(MINISTRY_TYPE_LABELS[b]),
 );
 
-// A native <dialog> styled as a right-side panel on wide viewports and a
+// A native <dialog> styled as a left-side panel on wide viewports and a
 // full-screen sheet on small ones -- w-full capped by max-w-xl gives that
 // responsiveness for free (below ~36rem viewport width it's already full
 // width, no separate breakpoint needed). <dialog> gives focus-trapping,
@@ -144,10 +145,18 @@ export function RequestDrawer(props: RequestDrawerProps) {
       // Deliberately no backdrop-click-to-close -- confirmed with the
       // decision-maker after a report of accidentally closing this panel
       // via a stray click near its edge. The X button (and the browser's
-      // own Escape-key handling, unaffected by this) stay as the only
-      // ways to dismiss it.
+      // own Escape-key handling, unaffected by this) stay as the only ways
+      // to dismiss it. closedby="none" opts out of the browser's own
+      // native light-dismiss too, not just this file's JS handlers, so
+      // that stays true regardless of a stray click's exact position.
+      closedby="none"
       aria-labelledby="drawer-title"
-      className="drawer-panel fixed inset-y-0 right-0 m-0 h-dvh w-full max-w-xl overflow-y-auto rounded-l-lg bg-white p-6 shadow-xl backdrop:bg-black/40"
+      // Opens from the left edge (decision-maker's call) -- rounded-r-lg,
+      // not rounded-l-lg, since the flush edge is now the left one (a
+      // rounded corner right at the viewport boundary isn't visible
+      // anyway) and the inner edge facing the rest of the page is the
+      // right one.
+      className="drawer-panel fixed inset-y-0 left-0 m-0 h-dvh w-full max-w-xl overflow-y-auto rounded-r-lg bg-white p-6 shadow-xl backdrop:bg-black/40"
     >
       <div className="flex items-center justify-between border-b border-slate-200 pb-4">
         <span className="flex items-center gap-2">
@@ -203,22 +212,6 @@ export function RequestDrawer(props: RequestDrawerProps) {
         )}
       </div>
     </dialog>
-  );
-}
-
-// A second, explicit way to close the drawer beyond the header's X --
-// confirmed with the decision-maker after removing backdrop-click-to-close
-// (to prevent accidental dismissal) left the X as the only way out, and the
-// header isn't sticky, so it scrolls out of view on a long form. Placed
-// alongside each step's own action row instead, so it's reachable from
-// wherever the requester's actually scrolled to. Styled like the wizard's
-// own secondary "← Back" button (bordered, not the primary teal action) so
-// it doesn't visually compete with Continue/Submit.
-function CloseButton({ onClose }: { onClose: () => void }) {
-  return (
-    <Button variant="secondary" onClick={onClose}>
-      Close
-    </Button>
   );
 }
 
@@ -485,12 +478,32 @@ function SignaturePad({ sigPadRef }: { sigPadRef: React.RefObject<SignatureCanva
   );
 }
 
-// A second, stacked native <dialog> -- browsers support multiple top-layer
-// modals, each showModal() pushes above the last, so this opens on top of
-// RequestDrawer's own <dialog> without any manual z-index/positioning.
+// A confirm-before-submit step, layered on top of RequestDrawer's own
+// content rather than opened as a second, nested native <dialog>.
 // Submitting a request can't be undone once approvers start deciding on
 // it, so this is a deliberate extra "are you sure" step rather than firing
 // straight off the Review step's Submit button.
+//
+// This used to be its own showModal()'d <dialog>, stacked on top of
+// RequestDrawer's -- browsers do support multiple top-layer modals, and
+// that part worked. But closing this second dialog (via Cancel calling
+// .close() on it) made the OUTER dialog's own native "close" event fire
+// too, silently closing the whole drawer -- found live: clicking Cancel
+// here closed the entire panel, not just this confirmation. Traced with
+// an instrumented .close() and a stack trace on the outer close handler:
+// .close() was only ever called on this dialog, never the outer one, yet
+// the outer's "close" event fired anyway, immediately after -- a genuine
+// browser behavior in the modal-dialog stack (tracked internally, not by
+// DOM position -- moving this dialog to a document.body portal, fully
+// decoupling it from the outer dialog's DOM subtree, didn't stop it
+// either). The outer dialog already paints a full-viewport backdrop via
+// its own top-layer promotion, so nothing here needs a second competing
+// top-layer dialog to render above the rest of the page -- a plain
+// overlay positioned to cover the same box as the drawer itself (see
+// className below, deliberately mirroring RequestDrawer's own
+// inset-y-0/left-0/max-w-xl) sits on top of the drawer's own content
+// without ever opening a second modal, sidestepping the browser behavior
+// entirely instead of working around it.
 function SubmitConfirmDialog({
   isResubmit,
   isPending,
@@ -502,42 +515,43 @@ function SubmitConfirmDialog({
   onConfirm: () => void;
   onCancel: () => void;
 }) {
-  const dialogRef = useRef<HTMLDialogElement>(null);
-
   useEffect(() => {
-    const dialog = dialogRef.current;
-    if (dialog && !dialog.open) dialog.showModal();
-  }, []);
-
-  function handleClose() {
-    dialogRef.current?.close();
-  }
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") onCancel();
+    }
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [onCancel]);
 
   return (
-    <dialog
-      ref={dialogRef}
-      onClose={onCancel}
+    <div
       onClick={(e) => {
-        if (e.target === dialogRef.current) handleClose();
+        if (e.target === e.currentTarget) onCancel();
       }}
-      aria-labelledby="submit-confirm-title"
-      className="m-auto w-full max-w-sm rounded-lg bg-white p-6 shadow-xl backdrop:bg-black/40"
+      className="fixed inset-y-0 left-0 z-10 flex w-full max-w-xl items-center justify-center bg-black/40 p-6"
     >
-      <h3 id="submit-confirm-title" className="text-base font-bold text-slate-900">
-        {isResubmit ? "Resubmit reimbursement?" : "Submit reimbursement?"}
-      </h3>
-      <p className="mt-2 text-sm text-slate-600">
-        Your request will be sent to the required approvers for review.
-      </p>
-      <div className="mt-5 flex justify-end gap-3">
-        <Button variant="secondary" onClick={handleClose}>
-          Cancel
-        </Button>
-        <Button disabled={isPending} onClick={onConfirm}>
-          {isPending ? "Submitting…" : isResubmit ? "Resubmit request" : "Submit request"}
-        </Button>
+      <div
+        role="alertdialog"
+        aria-modal="true"
+        aria-labelledby="submit-confirm-title"
+        className="w-full max-w-sm rounded-lg bg-white p-6 shadow-xl"
+      >
+        <h3 id="submit-confirm-title" className="text-base font-bold text-slate-900">
+          {isResubmit ? "Resubmit reimbursement?" : "Submit reimbursement?"}
+        </h3>
+        <p className="mt-2 text-sm text-slate-600">
+          Your request will be sent to the required approvers for review.
+        </p>
+        <div className="mt-5 flex justify-end gap-3">
+          <Button variant="secondary" onClick={onCancel}>
+            Cancel
+          </Button>
+          <Button disabled={isPending} onClick={onConfirm}>
+            {isPending ? "Submitting…" : isResubmit ? "Resubmit request" : "Submit request"}
+          </Button>
+        </div>
       </div>
-    </dialog>
+    </div>
   );
 }
 
