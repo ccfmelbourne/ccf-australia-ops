@@ -184,3 +184,48 @@ GST Included`;
   assert.equal(result.amount, 34);
   assert.match(result.item ?? "", /ALOGIC ULTRA MINI USB-C TO ETHERNET/);
 });
+
+test("leaves item null rather than swallowing a whole invoice with no Items header (real Renewed Vision invoice)", () => {
+  // Real rawText captured live from a Renewed Vision SaaS subscription
+  // invoice -- no "Items" header, and no totals label appears until deep
+  // into the document, so without a length safety cap the item block
+  // would span almost the entire invoice (billing address, subscription
+  // ID, billing period...) and still resolve to one distinct dollar
+  // amount, since $469.00 is legitimately repeated three times (invoice
+  // amount, unit price, line amount) for a single line.
+  const text = `Renewed Vision
+Renewed Vision
+6505 Shiloh Road, Suite 200
+Alpharetta, Georgia 30005
+United States
+ABN: 3000 1348 4842
+INVOICE
+Invoice # 2026-02-14-10988
+Invoice Date Feb 14, 2026
+Invoice Amount $469.00 (USD)
+PAID
+BILLED TO
+CCOMMS Melbourne
+CCF Melbourne
+64 Lockhart Street
+Mernda, 3754
+Australia
+ABN: 96720517655
+DESCRIPTION
+ProPresenter Legacy Campuses
+SUBSCRIPTION
+ID Azq83qUm2fwCd4Wea
+Billing Period Feb 14, 2026 to Feb 13, 2027
+Next Billing Date Feb 14, 2027
+UNITS
+UNIT PRICE AMOUNT (USD)
+1
+$469.00
+$469.00
+Total
+$469.00`;
+
+  const result = parseReceiptText(text);
+  assert.equal(result.merchant, "Renewed Vision");
+  assert.equal(result.item, null);
+});

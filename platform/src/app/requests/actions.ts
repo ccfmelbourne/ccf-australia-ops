@@ -6,6 +6,7 @@ import {
   createDraftRequest,
   addLineItem,
   removeLineItem,
+  updateLineItem,
   assertRequestIsEditable,
   addReceiptRecord,
   removeReceiptRecord,
@@ -183,6 +184,33 @@ export async function removeLineItemAction(
   }
   try {
     await removeLineItem(lineItemId, userId);
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Something went wrong." };
+  }
+}
+
+// The fix for an auto-scanned line item OCR got wrong -- common enough
+// (real receipt/invoice layouts vary a lot more than the happy path
+// assumes) that remove-and-re-add alone wasn't a good enough correction
+// path.
+export async function updateLineItemAction(
+  lineItemId: string,
+  description: string,
+  amount: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const userId = await getCurrentUserId();
+  if (!userId) {
+    return { ok: false, error: "Not signed in." };
+  }
+
+  const parsed = lineItemSchema.safeParse({ description, amount });
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input" };
+  }
+
+  try {
+    await updateLineItem(lineItemId, userId, parsed.data.description, parsed.data.amount);
     return { ok: true };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : "Something went wrong." };

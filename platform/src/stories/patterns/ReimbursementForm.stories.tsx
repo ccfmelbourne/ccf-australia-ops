@@ -179,7 +179,7 @@ function ReimbursementFlowSimulator({ endingVariant }: { endingVariant: "general
               onClick={addLineItem}
               className="self-start rounded-md bg-teal-600 px-4 py-2 text-sm font-semibold text-white"
             >
-              Add line item
+              Add item
             </button>
           </div>
           <div className="flex justify-between">
@@ -284,7 +284,7 @@ async function playFullFlow(canvasElement: HTMLElement) {
   await userEvent.click(canvas.getByRole("button", { name: "Continue →" }));
   await userEvent.type(canvas.getByLabelText("Description"), "Conference registration");
   await userEvent.type(canvas.getByLabelText("Amount"), "1200");
-  await userEvent.click(canvas.getByRole("button", { name: "Add line item" }));
+  await userEvent.click(canvas.getByRole("button", { name: "Add item" }));
   await userEvent.click(canvas.getByRole("button", { name: "Continue →" }));
   await userEvent.type(canvas.getByLabelText("Account name"), "Jane Smith");
   await userEvent.type(canvas.getByLabelText("BSB"), "123-456");
