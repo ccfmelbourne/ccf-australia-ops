@@ -301,37 +301,38 @@ export async function getDraftRequest(
 
 const STALE_EMPTY_DRAFT_AGE_MS = 60 * 60 * 1000; // 1 hour
 
-// Opportunistic cleanup for a rare edge case: RequestDrawer.tsx normally
-// deletes an empty draft the moment its panel is closed, but that never
-// runs if the browser crashes or the tab closes first before then. Rather
-// than standing up a cron job for what should be a handful of rows ever,
-// this piggybacks on the one place a requester's own drafts are already
-// read -- swept every time they load their own request list, scoped to
-// their own rows only, and only once a draft has sat untouched long
-// enough that it's clearly abandoned rather than just mid-creation.
-async function cleanupStaleEmptyDrafts(requesterId: string): Promise<void> {
+// Deletes every empty, abandoned DRAFT request system-wide (not scoped to
+// one requester) -- covers the rare edge case where a browser crashes or
+// a tab closes before RequestDrawer.tsx's normal close-time cleanup ever
+// runs. Run periodically by a Vercel Cron job (vercel.json's "crons",
+// hitting src/app/api/cron/cleanup-stale-drafts/route.ts) rather than
+// inline on the request-serving path -- an earlier version ran this
+// per-requester inside getMyRequests itself, but that added a real extra
+// database round-trip to every single action in the app (getMyRequests
+// runs after every router.refresh()) just to catch something that, by
+// definition, only ever affects a handful of rows.
+export async function cleanupStaleEmptyDrafts(): Promise<number> {
   const cutoff = new Date(Date.now() - STALE_EMPTY_DRAFT_AGE_MS);
   const candidates = await prisma.reimbursementRequest.findMany({
-    where: { requesterId, status: "DRAFT", createdAt: { lt: cutoff } },
+    where: { status: "DRAFT", createdAt: { lt: cutoff } },
     include: { _count: { select: { lineItems: true } } },
   });
-  const staleIds = candidates.filter((r) => r._count.lineItems === 0).map((r) => r.id);
-  if (staleIds.length === 0) return;
+  const stale = candidates.filter((r) => r._count.lineItems === 0);
   await Promise.all(
-    staleIds.map(async (id) => {
-      const { receiptStorageKeys, signatureStorageKeys } = await deleteDraftRequest(id, requesterId);
+    stale.map(async (r) => {
+      const { receiptStorageKeys, signatureStorageKeys } = await deleteDraftRequest(r.id, r.requesterId);
       await Promise.all([
         ...receiptStorageKeys.map((key) => deleteReceipt(key)),
         ...signatureStorageKeys.map((key) => deleteSignature(key)),
       ]);
     }),
   );
+  return stale.length;
 }
 
 // All statuses (not DRAFT-only like getDraftRequest) -- this is the
 // requester's own landing page, listing everything they've ever created.
 export async function getMyRequests(requesterId: string): Promise<RequestListItemView[]> {
-  await cleanupStaleEmptyDrafts(requesterId);
   const requests = await prisma.reimbursementRequest.findMany({
     where: { requesterId },
     orderBy: { createdAt: "desc" },

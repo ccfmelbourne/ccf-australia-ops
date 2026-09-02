@@ -4,5 +4,8 @@
     "deploymentEnabled": {
       "pilot/reimbursement-voucher-test": false
     }
-  }
+  },
+  "crons": [
+    { "path": "/api/cron/cleanup-stale-drafts", "schedule": "0 3 * * *" }
+  ]
 }
