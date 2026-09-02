@@ -217,17 +217,21 @@ export async function updateLineItemAction(
   }
 }
 
-// Upload and scan in one call -- no separate manual "Scan" step. A scan
-// failure never blocks the upload itself (the receipt is still attached
-// either way); a scan that can't find both a merchant and a valid amount
-// leaves the receipt unscanned (extractedMerchant/extractedAmount/
-// scannedAt all null) rather than inventing partial data, and the
-// requester adds that line item manually, same as always. When both are
-// found, the line item is created automatically -- confirmed 2026-09-02
-// with the decision-maker as a deliberate reversal of this module's
-// original "OCR never writes without human confirmation" rule (see
-// receipt-extraction/types.ts).
-export async function uploadAndScanReceiptAction(
+// Upload, with scanning as an opt-out (a "scan" field on formData, read
+// as anything other than the literal string "false") rather than a
+// separate manual "Scan" step -- confirmed with the decision-maker after
+// a report that auto-scanning every upload got "annoying" for receipts
+// the requester never wanted turned into a line item automatically. A
+// scan failure never blocks the upload itself (the receipt is still
+// attached either way); a scan that can't find both a merchant and a
+// valid amount leaves the receipt unscanned (extractedMerchant/
+// extractedAmount/scannedAt all null) rather than inventing partial
+// data, and the requester adds that line item manually, same as always.
+// When both are found, the line item is created automatically --
+// confirmed 2026-09-02 with the decision-maker as a deliberate reversal
+// of this module's original "OCR never writes without human
+// confirmation" rule (see receipt-extraction/types.ts).
+export async function uploadReceiptAction(
   requestId: string,
   formData: FormData,
 ): Promise<{ ok: boolean; error?: string }> {
@@ -240,6 +244,7 @@ export async function uploadAndScanReceiptAction(
   if (!(file instanceof File) || file.size === 0) {
     return { ok: false, error: "Choose a file to upload." };
   }
+  const scan = formData.get("scan") !== "false";
 
   try {
     assertValidReceiptFile({ size: file.size, contentType: file.type });
@@ -256,15 +261,17 @@ export async function uploadAndScanReceiptAction(
     let merchant: string | null = null;
     let item: string | null = null;
     let amount: number | null = null;
-    try {
-      const result = await receiptExtractionService.extract({ buffer, contentType: file.type });
-      merchant = result.merchant?.trim() || null;
-      item = result.item?.trim() || null;
-      amount = result.amount;
-    } catch {
-      // Scanning is a nicety layered on top of a successful upload -- an
-      // extraction failure (provider error, unreadable image) doesn't fail
-      // the upload, it just leaves this receipt unscanned.
+    if (scan) {
+      try {
+        const result = await receiptExtractionService.extract({ buffer, contentType: file.type });
+        merchant = result.merchant?.trim() || null;
+        item = result.item?.trim() || null;
+        amount = result.amount;
+      } catch {
+        // Scanning is a nicety layered on top of a successful upload -- an
+        // extraction failure (provider error, unreadable image) doesn't fail
+        // the upload, it just leaves this receipt unscanned.
+      }
     }
     const usable = merchant !== null && amount !== null && amount > 0;
     // "<merchant> | <item>" when a single product line could be isolated,

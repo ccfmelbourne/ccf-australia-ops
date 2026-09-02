@@ -197,7 +197,7 @@ function isNoiseLine(line: string): boolean {
 // collects every non-noise line in that block rather than requiring a
 // single text+price line. Only returned when the block contains exactly
 // one distinct dollar amount: a receipt with several items still collapses
-// to one line item at the receipt's total (see uploadAndScanReceiptAction),
+// to one line item at the receipt's total (see uploadReceiptAction),
 // so more than one amount means more than one product, and guessing a
 // single name out of several would misrepresent the purchase -- null is
 // the safer result there, leaving the description as the merchant name
