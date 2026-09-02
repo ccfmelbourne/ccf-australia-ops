@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { formatAmount } from "@/lib/money";
-import { getReceiptDownloadUrl } from "@/lib/receipt-storage";
+import { getReceiptDownloadUrl, deleteReceipt } from "@/lib/receipt-storage";
 import { normalizeBsb, formatBsb, assertValidAccountNumber } from "@/lib/bank-details";
 import {
   assertValidSignatureImage,
@@ -299,22 +299,61 @@ export async function getDraftRequest(
   };
 }
 
+const STALE_EMPTY_DRAFT_AGE_MS = 60 * 60 * 1000; // 1 hour
+
+// Opportunistic cleanup for a rare edge case: RequestDrawer.tsx normally
+// deletes an empty draft the moment its panel is closed, but that never
+// runs if the browser crashes or the tab closes first before then. Rather
+// than standing up a cron job for what should be a handful of rows ever,
+// this piggybacks on the one place a requester's own drafts are already
+// read -- swept every time they load their own request list, scoped to
+// their own rows only, and only once a draft has sat untouched long
+// enough that it's clearly abandoned rather than just mid-creation.
+async function cleanupStaleEmptyDrafts(requesterId: string): Promise<void> {
+  const cutoff = new Date(Date.now() - STALE_EMPTY_DRAFT_AGE_MS);
+  const candidates = await prisma.reimbursementRequest.findMany({
+    where: { requesterId, status: "DRAFT", createdAt: { lt: cutoff } },
+    include: { _count: { select: { lineItems: true } } },
+  });
+  const staleIds = candidates.filter((r) => r._count.lineItems === 0).map((r) => r.id);
+  if (staleIds.length === 0) return;
+  await Promise.all(
+    staleIds.map(async (id) => {
+      const { receiptStorageKeys, signatureStorageKeys } = await deleteDraftRequest(id, requesterId);
+      await Promise.all([
+        ...receiptStorageKeys.map((key) => deleteReceipt(key)),
+        ...signatureStorageKeys.map((key) => deleteSignature(key)),
+      ]);
+    }),
+  );
+}
+
 // All statuses (not DRAFT-only like getDraftRequest) -- this is the
 // requester's own landing page, listing everything they've ever created.
 export async function getMyRequests(requesterId: string): Promise<RequestListItemView[]> {
+  await cleanupStaleEmptyDrafts(requesterId);
   const requests = await prisma.reimbursementRequest.findMany({
     where: { requesterId },
     orderBy: { createdAt: "desc" },
+    include: { _count: { select: { lineItems: true } } },
   });
-  return requests.map((r) => ({
-    id: r.id,
-    voucherNo: r.voucherNo,
-    requestType: r.requestType,
-    ministryType: r.ministryType,
-    totalAmount: formatAmount(r.totalAmount),
-    status: r.status,
-    createdAt: r.createdAt.toISOString(),
-  }));
+  // A brand-new draft (created the instant the create wizard opens, before
+  // its first line item) isn't "real" yet -- RequestDrawer.tsx's
+  // handleDialogClose auto-deletes exactly this same state if the wizard
+  // is closed without adding anything. Hiding it here too until then means
+  // the table never shows it only to have it vanish a moment later when
+  // an abandoned draft gets cleaned up -- it simply never appears.
+  return requests
+    .filter((r) => !(r.status === "DRAFT" && r._count.lineItems === 0))
+    .map((r) => ({
+      id: r.id,
+      voucherNo: r.voucherNo,
+      requestType: r.requestType,
+      ministryType: r.ministryType,
+      totalAmount: formatAmount(r.totalAmount),
+      status: r.status,
+      createdAt: r.createdAt.toISOString(),
+    }));
 }
 
 export async function updateDraftRequestDetails(

@@ -22,6 +22,7 @@ import { BankDetailsManager } from "./BankDetailsManager";
 import { ErrorBanner } from "@/components/ErrorBanner";
 import { RequestStatusBadge } from "@/components/RequestStatusBadge";
 import { MoneyStat } from "@/components/MoneyStat";
+import { Skeleton } from "@/components/Skeleton";
 import { getTier, getRequiredApproverRoles } from "@/lib/approval-routing";
 import type { DraftRequestView } from "@/lib/request-data";
 
@@ -74,7 +75,6 @@ type RequestDrawerProps =
   | { mode: "edit"; data: DraftRequestView; showWizard: boolean; onClose: () => void };
 
 export function RequestDrawer(props: RequestDrawerProps) {
-  const router = useRouter();
   const dialogRef = useRef<HTMLDialogElement>(null);
 
   useEffect(() => {
@@ -100,13 +100,18 @@ export function RequestDrawer(props: RequestDrawerProps) {
   // flat view, since clicking Edit on an unsubmitted draft now shows flat
   // too) -- a returned request has real submission history and is never
   // deleted just because its line items were edited down to zero before
-  // closing. Fire-and-forget: the dialog closes immediately, the
-  // delete/refresh happen in the background.
-  function handleDialogClose() {
+  // closing. The native dialog itself has already closed by the time this
+  // fires (that part is instant, browser-native), but props.onClose() is
+  // awaited until the delete finishes -- it's what tells RequestsTable to
+  // drop the `open` query param and re-fetch the table. Calling it before
+  // the delete lands used to show the still-there draft row for a moment,
+  // then remove it visibly a beat later once a second refresh caught up --
+  // found via the decision-maker actually watching it happen. Awaiting
+  // first means the table's one and only re-fetch already reflects the
+  // row being gone.
+  async function handleDialogClose() {
     if (props.mode === "edit" && props.data.returnReason === null && props.data.lineItems.length === 0) {
-      deleteRequestAction(props.data.id).then((result) => {
-        if (result.ok) router.refresh();
-      });
+      await deleteRequestAction(props.data.id);
     }
     props.onClose();
   }
@@ -219,7 +224,33 @@ function CreateStep({ onCreated }: { onCreated: (data: DraftRequestView) => void
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  return error ? <ErrorBanner message={error} /> : <p className="text-sm text-slate-500">Creating…</p>;
+  // Shaped like the wizard's step 1 (WizardSteps pills + the two
+  // RequestDetailsFields selects) -- a fresh draft always transitions
+  // straight into that view once created, so the skeleton previews it
+  // instead of a generic spinner.
+  return error ? (
+    <ErrorBanner message={error} />
+  ) : (
+    <div className="flex flex-col gap-4">
+      <div className="flex gap-2">
+        <Skeleton className="h-6 w-24 rounded-full" />
+        <Skeleton className="h-6 w-32 rounded-full" />
+        <Skeleton className="h-6 w-24 rounded-full" />
+        <Skeleton className="h-6 w-20 rounded-full" />
+      </div>
+      <div className="flex flex-col gap-1">
+        <Skeleton className="h-3 w-24" />
+        <Skeleton className="h-9 w-full" />
+      </div>
+      <div className="flex flex-col gap-1">
+        <Skeleton className="h-3 w-20" />
+        <Skeleton className="h-9 w-full" />
+      </div>
+      <div className="flex justify-end">
+        <Skeleton className="h-9 w-28" />
+      </div>
+    </div>
+  );
 }
 
 // Request type + ministry selects, each change saved immediately via
