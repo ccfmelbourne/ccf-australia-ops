@@ -82,9 +82,20 @@ enum ApproverRole {
   REGIONAL_DIRECTOR
 }
 
+// AUTO_SATISFIED added 2026-09-02: when the requester themselves is the
+// designated approver for a role (e.g. a Ministry Overseer submitting
+// their own ministry's request), that tier is satisfied automatically at
+// submit time instead of requiring them to click "Approve" on their own
+// submission -- confirmed business rule: a requester must never perform
+// a manual approval action on their own reimbursement, but where policy
+// explicitly designates them as the approver for a tier, that tier may be
+// auto-satisfied, with an explicit audit record (RequiredApproval.comments)
+// explaining why. Every subsequent tier still requires independent
+// approval -- see approval-data.ts/request-data.ts's submitRequest.
 enum ApprovalStatus {
   PENDING
   APPROVED
+  AUTO_SATISFIED
   REJECTED
 }
 

@@ -1,7 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { formatAmount } from "@/lib/money";
-import { getApprovedRequestDetail, receiptFilename } from "@/lib/request-data";
-import { sendApprovedRequestEmail } from "@/lib/notifications";
+import { receiptFilename, finalizeIfFullyApproved, isDecided } from "@/lib/request-data";
 import { getReceiptDownloadUrl } from "@/lib/receipt-storage";
 import { assertValidSignatureImage, buildSignatureStorageKey, uploadSignature } from "@/lib/signature-storage";
 import {
@@ -125,6 +124,12 @@ export async function getPendingApprovalsForUser(userId: string): Promise<Pendin
     const isClaimableSlot = CLAIMABLE_ROLES.includes(a.role) && a.approverUserId === null;
     if (!isClaimableSlot) return true;
 
+    // A requester must never perform a manual approval action on their own
+    // reimbursement -- being a COS_POOL member only auto-satisfies *one*
+    // slot on their own request (request-data.ts's submitRequest); they
+    // can't also claim the other, still-open slot themselves.
+    if (a.request.requesterId === userId) return false;
+
     const overseerRow = a.request.requiredApprovals.find((r) => r.role === "MINISTRY_OVERSEER");
     if (overseerRow && overseerRow.status !== "APPROVED") return false;
 
@@ -158,53 +163,14 @@ export async function getPendingApprovalsForUser(userId: string): Promise<Pendin
   );
 }
 
-// A tier-4 request's REGIONAL_DIRECTOR row can be satisfied two ways:
-// directly APPROVED, or (as an alternative) the request's
-// regionalDirectorOverrideConfirmedAt being set -- Ross Callado's explicit
-// "within budget" confirmation, gated on COS1+COS2 both already APPROVED
-// (confirmRegionalDirectorOverride enforces that precondition before ever
-// setting the timestamp, so it's not re-checked here). Every other role
-// still needs a flat APPROVED.
-function isFullyApproved(
-  requiredApprovals: { role: string; status: string }[],
-  regionalDirectorOverrideConfirmedAt: Date | null,
-): boolean {
-  const nonRegional = requiredApprovals.filter((a) => a.role !== "REGIONAL_DIRECTOR");
-  if (!nonRegional.every((a) => a.status === "APPROVED")) return false;
-  const regional = requiredApprovals.find((a) => a.role === "REGIONAL_DIRECTOR");
-  if (!regional) return true; // tier < 4, no such row exists at all
-  return regional.status === "APPROVED" || regionalDirectorOverrideConfirmedAt !== null;
-}
-
-// Two places can newly complete a request's approval: a regular
-// decideApproval("APPROVED") call, and confirmRegionalDirectorOverride.
-// Both call this instead of duplicating the finalize-and-notify logic.
-async function finalizeIfFullyApproved(requestId: string): Promise<void> {
-  const [requiredApprovals, request] = await Promise.all([
-    prisma.requiredApproval.findMany({ where: { reimbursementRequestId: requestId } }),
-    prisma.reimbursementRequest.findUnique({
-      where: { id: requestId },
-      select: { regionalDirectorOverrideConfirmedAt: true },
-    }),
-  ]);
-  if (!request || !isFullyApproved(requiredApprovals, request.regionalDirectorOverrideConfirmedAt)) return;
-
-  await prisma.reimbursementRequest.update({
-    where: { id: requestId },
-    data: { status: "APPROVED" },
-  });
-  // Per ADR 0001, a notification failure must never undo or block the
-  // approval decision it's reporting on -- caught and logged, not
-  // rethrown.
-  try {
-    const detail = await getApprovedRequestDetail(requestId);
-    if (detail) {
-      await sendApprovedRequestEmail(detail);
-    }
-  } catch (err) {
-    console.error("Failed to send approved-request notification:", err);
-  }
-}
+// isDecided/isFullyApproved's "did a self-submitting requester's own
+// AUTO_SATISFIED tier count as decided" logic, and finalizeIfFullyApproved
+// itself, now live in request-data.ts -- submitRequest needs the exact
+// same check (a request can complete immediately at submission if every
+// required tier turns out to be AUTO_SATISFIED, e.g. a tier-1 request
+// self-submitted by its own Ministry Overseer), and request-data.ts is
+// the module both this file and that one already share, avoiding a
+// circular import between the two.
 
 // A single rejection ends the whole chain (matches spec 0002's
 // rejectReturn action). An approval only moves the request to APPROVED
@@ -265,6 +231,13 @@ export async function decideApproval(
     }
     const poolUserIds = await resolveCosPoolUserIds();
     if (!poolUserIds.includes(userId)) {
+      throw new Error("Approval not found.");
+    }
+    // A requester must never perform a manual approval action on their own
+    // reimbursement -- pool membership alone doesn't override that, even
+    // for a still-open slot request-data.ts's submitRequest didn't
+    // auto-satisfy.
+    if (approval.request.requesterId === userId) {
       throw new Error("Approval not found.");
     }
     const alreadyClaimed = await prisma.requiredApproval.findFirst({
@@ -364,7 +337,7 @@ export async function requestChanges(approvalId: string, userId: string, comment
   // request changes on a still-unclaimed slot without claiming it.
   if (CLAIMABLE_ROLES.includes(approval.role) && approval.approverUserId === null) {
     const poolUserIds = await resolveCosPoolUserIds();
-    if (!poolUserIds.includes(userId)) {
+    if (!poolUserIds.includes(userId) || approval.request.requesterId === userId) {
       throw new Error("Approval not found.");
     }
   } else if (approval.approverUserId !== userId && !isDevApprover) {
@@ -418,7 +391,7 @@ export async function confirmRegionalDirectorOverride(requestId: string, userId:
   }
   const cos1 = request.requiredApprovals.find((a) => a.role === "COS1");
   const cos2 = request.requiredApprovals.find((a) => a.role === "COS2");
-  if (cos1?.status !== "APPROVED" || cos2?.status !== "APPROVED") {
+  if (!cos1 || !isDecided(cos1.status) || !cos2 || !isDecided(cos2.status)) {
     throw new Error("Both COS approvals are required before confirming.");
   }
   const confirmer = await prisma.user.findUnique({

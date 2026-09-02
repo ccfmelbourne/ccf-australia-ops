@@ -12,11 +12,12 @@ function formatDate(iso: string | null): string {
   return new Date(iso).toLocaleDateString("en-AU", { day: "numeric", month: "short", year: "numeric" });
 }
 
-type TimelineState = "approved" | "waived" | "rejected" | "pending";
+type TimelineState = "approved" | "waived" | "auto_satisfied" | "rejected" | "pending";
 
 const TIMELINE_ICON: Record<TimelineState, string> = {
   approved: "✓",
   waived: "✓",
+  auto_satisfied: "✓",
   rejected: "×",
   pending: "◷",
 };
@@ -24,6 +25,7 @@ const TIMELINE_ICON: Record<TimelineState, string> = {
 const TIMELINE_ICON_CLASSES: Record<TimelineState, string> = {
   approved: "bg-teal-600 text-white",
   waived: "bg-teal-100 text-teal-700",
+  auto_satisfied: "bg-teal-100 text-teal-700",
   rejected: "bg-red-600 text-white",
   pending: "bg-slate-200 text-slate-500",
 };
@@ -58,15 +60,18 @@ export function ApprovalTimeline({
           // the same way on the final voucher).
           const waived =
             a.role === "REGIONAL_DIRECTOR" &&
-            a.status !== "APPROVED" &&
+            a.status === "PENDING" &&
             regionalDirectorOverrideConfirmedAt !== null;
-          const state: TimelineState = waived
-            ? "waived"
-            : a.status === "APPROVED"
-              ? "approved"
-              : a.status === "REJECTED"
-                ? "rejected"
-                : "pending";
+          const state: TimelineState =
+            a.status === "AUTO_SATISFIED"
+              ? "auto_satisfied"
+              : waived
+                ? "waived"
+                : a.status === "APPROVED"
+                  ? "approved"
+                  : a.status === "REJECTED"
+                    ? "rejected"
+                    : "pending";
 
           return (
             <li key={i} className="flex gap-3">
@@ -99,6 +104,9 @@ export function ApprovalTimeline({
                 )}
                 {state === "waived" && (
                   <p className="text-xs text-teal-600">Waived — satisfied via committee confirmation</p>
+                )}
+                {state === "auto_satisfied" && (
+                  <p className="text-xs text-teal-600">{a.comments ?? "Auto-satisfied"}</p>
                 )}
                 {state === "pending" && <p className="text-xs text-slate-500">Awaiting approval</p>}
               </div>
