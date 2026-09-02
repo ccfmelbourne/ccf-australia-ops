@@ -2,7 +2,7 @@
 
 import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { uploadAndScanReceiptAction, removeReceiptAction } from "@/app/requests/actions";
+import { uploadReceiptAction, removeReceiptAction } from "@/app/requests/actions";
 import { ErrorBanner } from "@/components/ErrorBanner";
 import { SectionHeading } from "@/components/SectionHeading";
 import { ReceiptProcessingCard, ReceiptCard } from "./ReceiptCard";
@@ -28,6 +28,11 @@ export function ReceiptManager({
   const [isPending, startTransition] = useTransition();
   const [isDragging, setIsDragging] = useState(false);
   const [processing, setProcessing] = useState<ProcessingFile[]>([]);
+  // Scanning defaults on (the previous always-on behavior), but reported
+  // as "annoying" when a requester just wants to attach a receipt without
+  // it turning into an auto-created line item -- this lets them opt out
+  // per upload rather than removing the auto-created item afterward.
+  const [scanEnabled, setScanEnabled] = useState(true);
   // Inline error state, not a toast -- ReceiptManager always renders inside
   // a native <dialog> (RequestDrawer.tsx), which the browser promotes to
   // the "top layer" the instant it's opened via showModal(). Anything in
@@ -37,30 +42,32 @@ export function ReceiptManager({
   // dialog's own DOM doesn't have this problem.
   const [error, setError] = useState<string | null>(null);
 
-  // Each file is uploaded and scanned in one combined call
-  // (uploadAndScanReceiptAction), processed sequentially rather than all
-  // at once -- a clean, ordered per-file status instead of a burst of
-  // concurrent uploads racing each other. router.refresh() after each one
-  // so cards appear one by one as they finish. The "scanning" label swap
-  // is purely cosmetic (there's no real per-phase signal from one combined
-  // server call) -- it just gives a sense of progress rather than a
-  // single opaque "working..." the whole time.
-  async function processFiles(files: File[]) {
-    setError(null);
-    for (const file of files) {
-      const tempId = `${file.name}-${Date.now()}-${Math.random()}`;
-      setProcessing((prev) => [...prev, { tempId, filename: file.name, status: "uploading" }]);
-      const scanningTimer = setTimeout(() => {
-        setProcessing((prev) =>
-          prev.map((p) => (p.tempId === tempId ? { ...p, status: "scanning" } : p)),
-        );
-      }, 700);
+  // Each file is uploaded (and, unless scanEnabled is off, scanned) in one
+  // combined call (uploadReceiptAction), processed sequentially rather
+  // than all at once -- a clean, ordered per-file status instead of a
+  // burst of concurrent uploads racing each other. router.refresh() after
+  // each one so cards appear one by one as they finish. The "scanning"
+  // label swap is purely cosmetic (there's no real per-phase signal from
+  // one combined server call) -- it just gives a sense of progress rather
+  // than a single opaque "working..." the whole time, and is skipped
+  // entirely when scanning is off, since nothing happens after the upload
+  // in that case.
+  async function processFiles(withIds: { file: File; tempId: string }[]) {
+    for (const { file, tempId } of withIds) {
+      const scanningTimer = scanEnabled
+        ? setTimeout(() => {
+            setProcessing((prev) =>
+              prev.map((p) => (p.tempId === tempId ? { ...p, status: "scanning" } : p)),
+            );
+          }, 700)
+        : null;
 
       const formData = new FormData();
       formData.set("file", file);
-      const result = await uploadAndScanReceiptAction(requestId, formData);
+      formData.set("scan", scanEnabled ? "true" : "false");
+      const result = await uploadReceiptAction(requestId, formData);
 
-      clearTimeout(scanningTimer);
+      if (scanningTimer) clearTimeout(scanningTimer);
       setProcessing((prev) => prev.filter((p) => p.tempId !== tempId));
       if (result.ok) {
         router.refresh();
@@ -70,11 +77,33 @@ export function ReceiptManager({
     }
   }
 
+  // Adds each file to `processing` synchronously, outside of
+  // startTransition, before kicking off the actual upload work inside it
+  // -- a state update made *inside* a transition callback is itself
+  // treated as low-priority transition work, so the "Uploading…" card
+  // and button text could lag well behind the button's disabled state
+  // (which comes from useTransition's own isPending and updates
+  // instantly) -- found live: the button visibly disabled right away but
+  // kept reading "Upload receipts" for a beat. Doing the add here first
+  // means the loading state shows the instant files are chosen.
+  function addFilesAndProcess(files: File[]) {
+    setError(null);
+    const withIds = files.map((file) => ({
+      file,
+      tempId: `${file.name}-${Date.now()}-${Math.random()}`,
+    }));
+    setProcessing((prev) => [
+      ...prev,
+      ...withIds.map(({ tempId, file }) => ({ tempId, filename: file.name, status: "uploading" as const })),
+    ]);
+    startTransition(() => processFiles(withIds));
+  }
+
   function handleFilesChosen(e: React.ChangeEvent<HTMLInputElement>) {
     const files = Array.from(e.target.files ?? []);
     if (fileInputRef.current) fileInputRef.current.value = "";
     if (files.length === 0) return;
-    startTransition(() => processFiles(files));
+    addFilesAndProcess(files);
   }
 
   function handleDrop(e: React.DragEvent<HTMLDivElement>) {
@@ -82,7 +111,7 @@ export function ReceiptManager({
     setIsDragging(false);
     const files = Array.from(e.dataTransfer.files);
     if (files.length === 0) return;
-    startTransition(() => processFiles(files));
+    addFilesAndProcess(files);
   }
 
   function handleRemove(receiptId: string) {
@@ -106,6 +135,15 @@ export function ReceiptManager({
         <p className="text-xs text-red-600">
           Scanning may not always get the item right, edit the item if needed.
         </p>
+        <label className="mt-2 flex items-center gap-2 text-sm text-slate-700">
+          <input
+            type="checkbox"
+            checked={scanEnabled}
+            onChange={(e) => setScanEnabled(e.target.checked)}
+            className="h-4 w-4 rounded border-slate-300"
+          />
+          Also scan for auto-fill
+        </label>
       </div>
 
       {error && <ErrorBanner message={error} />}
@@ -145,9 +183,23 @@ export function ReceiptManager({
           onClick={() => fileInputRef.current?.click()}
           className="rounded-md bg-teal-600 px-4 py-2 text-sm font-semibold text-white hover:bg-teal-700 disabled:opacity-60"
         >
-          Upload receipts
+          {/* Files are processed one at a time (processFiles awaits each
+              upload/scan before starting the next), so `processing` only
+              ever holds 0 or 1 entry -- reflecting its status right on the
+              button the requester just clicked, not just in the card
+              further down the form, since that card can be scrolled out
+              of view on a long form and easy to miss (found live: a
+              report of "no loader" during upload -- the card was there,
+              just not where attention already was). */}
+          {processing.length > 0
+            ? processing[0].status === "scanning"
+              ? "Scanning…"
+              : "Uploading…"
+            : "Upload receipts"}
         </button>
-        <p className="text-xs text-slate-500">You can upload multiple receipts</p>
+        <p className="text-xs text-slate-500">
+          {processing.length > 0 ? processing[0].filename : "You can upload multiple receipts"}
+        </p>
       </div>
 
       {(receipts.length > 0 || processing.length > 0) && (

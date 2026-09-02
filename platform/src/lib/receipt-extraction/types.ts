@@ -5,7 +5,7 @@
 //
 // extract() itself never writes anything -- it only reads a receipt and
 // returns what it found. What the caller does with the result is a
-// separate decision: as of 2026-09-02, uploadAndScanReceiptAction
+// separate decision: as of 2026-09-02, uploadReceiptAction
 // (app/requests/actions.ts) writes a real LineItem automatically whenever
 // a result has both a merchant and a valid amount, with no human
 // confirmation step -- a deliberate, explicitly confirmed reversal of this

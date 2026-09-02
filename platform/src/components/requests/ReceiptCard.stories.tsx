@@ -58,7 +58,7 @@ export const Extracted: Story = {
 };
 
 // Attached, but OCR couldn't find enough to act on -- the requester adds
-// the line item manually instead (uploadAndScanReceiptAction never
+// the line item manually instead (uploadReceiptAction never
 // invents data from an incomplete scan).
 export const ScanIncomplete: Story = {
   render: () => (

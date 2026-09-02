@@ -45,7 +45,7 @@ export interface DraftReceiptView {
   // by the time someone clicks, reloading the page gets a fresh one.
   viewUrl: string;
   // Set together, only when OCR extraction found both a merchant and a
-  // valid amount at upload time (uploadAndScanReceiptAction) -- null
+  // valid amount at upload time (uploadReceiptAction) -- null
   // covers both "not scanned yet" and "scanned but nothing usable came
   // back," which the UI renders the same way ("add manually").
   extractedMerchant: string | null;
@@ -901,7 +901,7 @@ export async function updateLineItem(
 // The actual R2 upload happens separately (src/lib/receipt-storage.ts) --
 // this only records the resulting storageKey. Receipts don't affect
 // totalAmount, so a single create needs no transaction. `extraction` is
-// set only when uploadAndScanReceiptAction's OCR call found both a
+// set only when uploadReceiptAction's OCR call found both a
 // merchant and a valid amount right after upload -- omitted (or null)
 // leaves the receipt's extracted* columns null, rendered as "add
 // manually" on its card.

@@ -167,7 +167,7 @@ model Receipt {
   uploadedAt             DateTime             @default(now())
   // Set together, only when OCR extraction found both a merchant name and
   // a valid positive amount right after upload -- that pair is what
-  // auto-creates a real LineItem (uploadAndScanReceiptAction,
+  // auto-creates a real LineItem (uploadReceiptAction,
   // requests/actions.ts). scannedAt null covers both "hasn't been
   // scanned yet" and "scanned but couldn't extract enough to act on" --
   // both render the same "add manually" state on the receipt's card, no

@@ -335,6 +335,15 @@ export function VoucherDocument({
                   <Text style={styles.approvalDate}>
                     {waivedRegionalDirector ? "" : formatDecidedAt(a.decidedAt)}
                   </Text>
+                  {/* Signature present but auto-satisfied (see the
+                      requesterSignature reuse in notifications.ts) still
+                      needs to read differently from a normal, independent
+                      approval -- it's the requester's own signature, not a
+                      separate approver's, so the voucher says so rather
+                      than looking indistinguishable from a real approval. */}
+                  {autoSatisfied && signature && (
+                    <Text style={styles.approvalDate}>(auto-satisfied)</Text>
+                  )}
                 </View>
               );
             })}
