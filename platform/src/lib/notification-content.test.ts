@@ -33,10 +33,16 @@ const baseDetail: ApprovedRequestDetail = {
 test("buildApprovedRequestEmail includes the voucher number, requester, and total", () => {
   const { subject, text } = buildApprovedRequestEmail(baseDetail);
   assert.match(subject, /DV-2026-0001/);
-  assert.match(subject, /245\.80/);
+  assert.match(subject, /Approved/);
   assert.match(text, /DV-2026-0001/);
   assert.match(text, /Jane Requester/);
   assert.match(text, /245\.80/);
+});
+
+test("buildApprovedRequestEmail includes request type and ministry for quick triage", () => {
+  const { text } = buildApprovedRequestEmail(baseDetail);
+  assert.match(text, /Reimbursement/);
+  assert.match(text, /Admin/);
 });
 
 test("buildApprovedRequestEmail never includes bank details", () => {
@@ -45,16 +51,16 @@ test("buildApprovedRequestEmail never includes bank details", () => {
   assert.doesNotMatch(text, /123-456|12345678/);
 });
 
-test("buildApprovedRequestEmail pluralizes the receipt count correctly", () => {
+test("buildApprovedRequestEmail describes the receipt count correctly", () => {
   const one = buildApprovedRequestEmail(baseDetail);
-  assert.match(one.text, /including 1 receipt\./);
+  assert.match(one.text, /1 receipt is also attached\./);
 
   const none = buildApprovedRequestEmail({ ...baseDetail, receipts: [] });
-  assert.match(none.text, /including 0 receipts\./);
+  assert.match(none.text, /No receipts were attached\./);
 
   const many = buildApprovedRequestEmail({
     ...baseDetail,
     receipts: [...baseDetail.receipts, { storageKey: "receipts/req-1/def-2.jpg", filename: "receipt2.jpg" }],
   });
-  assert.match(many.text, /including 2 receipts\./);
+  assert.match(many.text, /2 receipts are also attached\./);
 });
