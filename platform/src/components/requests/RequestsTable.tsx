@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { deleteRequestAction } from "@/app/requests/actions";
 import { REQUEST_TYPE_LABELS, MINISTRY_TYPE_LABELS } from "@/lib/request-types";
+import { Button } from "@/components/Button";
 import { ErrorBanner } from "@/components/ErrorBanner";
 import { RequestStatusBadge } from "@/components/RequestStatusBadge";
 import { EmptyState } from "@/components/EmptyState";
@@ -95,13 +96,7 @@ export function RequestsTable({
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-bold text-slate-900">My requests</h2>
-        <button
-          type="button"
-          onClick={() => setCreating(true)}
-          className="rounded-md bg-teal-600 px-4 py-2 text-sm font-semibold text-white hover:bg-teal-700"
-        >
-          Create Request
-        </button>
+        <Button onClick={() => setCreating(true)}>Create Request</Button>
       </div>
 
       {error && <ErrorBanner message={error} />}

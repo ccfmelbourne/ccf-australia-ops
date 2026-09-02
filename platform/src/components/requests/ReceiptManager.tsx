@@ -3,6 +3,7 @@
 import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { uploadReceiptAction, removeReceiptAction } from "@/app/requests/actions";
+import { Button } from "@/components/Button";
 import { ErrorBanner } from "@/components/ErrorBanner";
 import { SectionHeading } from "@/components/SectionHeading";
 import { ReceiptProcessingCard, ReceiptCard } from "./ReceiptCard";
@@ -177,11 +178,9 @@ export function ReceiptManager({
           aria-hidden
           className="sr-only"
         />
-        <button
-          type="button"
+        <Button
           disabled={isPending}
           onClick={() => fileInputRef.current?.click()}
-          className="rounded-md bg-teal-600 px-4 py-2 text-sm font-semibold text-white hover:bg-teal-700 disabled:opacity-60"
         >
           {/* Files are processed one at a time (processFiles awaits each
               upload/scan before starting the next), so `processing` only
@@ -196,7 +195,7 @@ export function ReceiptManager({
               ? "Scanning…"
               : "Uploading…"
             : "Upload receipts"}
-        </button>
+        </Button>
         <p className="text-xs text-slate-500">
           {processing.length > 0 ? processing[0].filename : "You can upload multiple receipts"}
         </p>

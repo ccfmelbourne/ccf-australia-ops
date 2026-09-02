@@ -3,7 +3,9 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { saveBankDetailsAction } from "@/app/requests/actions";
+import { Button } from "@/components/Button";
 import { ErrorBanner } from "@/components/ErrorBanner";
+import { Input } from "@/components/Input";
 import { SectionHeading } from "@/components/SectionHeading";
 import type { DraftBankDetailsView } from "@/lib/request-data";
 
@@ -54,59 +56,51 @@ export function BankDetailsManager({
           <label htmlFor="accountName" className="text-sm font-medium text-slate-700">
             Account name
           </label>
-          <input
+          <Input
             id="accountName"
             value={accountName}
             onChange={(e) => setAccountName(e.target.value)}
             required
-            className="rounded-md border border-slate-300 px-3 py-2 text-sm"
           />
         </div>
         <div className="flex flex-col gap-1">
           <label htmlFor="bsb" className="text-sm font-medium text-slate-700">
             BSB
           </label>
-          <input
+          <Input
             id="bsb"
             value={bsb}
             onChange={(e) => setBsb(e.target.value)}
             placeholder="123-456"
             required
-            className="rounded-md border border-slate-300 px-3 py-2 text-sm"
           />
         </div>
         <div className="flex flex-col gap-1">
           <label htmlFor="accountNumber" className="text-sm font-medium text-slate-700">
             Account number
           </label>
-          <input
+          <Input
             id="accountNumber"
             value={accountNumber}
             onChange={(e) => setAccountNumber(e.target.value)}
             required
-            className="rounded-md border border-slate-300 px-3 py-2 text-sm"
           />
         </div>
         <div className="flex flex-col gap-1">
           <label htmlFor="confirmAccountNumber" className="text-sm font-medium text-slate-700">
             Confirm account number
           </label>
-          <input
+          <Input
             id="confirmAccountNumber"
             value={confirmAccountNumber}
             onChange={(e) => setConfirmAccountNumber(e.target.value)}
             required
-            className="rounded-md border border-slate-300 px-3 py-2 text-sm"
           />
         </div>
         {error && <ErrorBanner message={error} />}
-        <button
-          type="submit"
-          disabled={isPending}
-          className="self-start rounded-md bg-teal-600 px-4 py-2 text-sm font-semibold text-white hover:bg-teal-700 disabled:opacity-60"
-        >
+        <Button type="submit" disabled={isPending} className="self-start">
           {isPending ? "Saving…" : bankDetails ? "Update bank details" : "Save bank details"}
-        </button>
+        </Button>
       </form>
     </section>
   );
