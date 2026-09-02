@@ -551,7 +551,7 @@ export async function submitRequest(
     throw new Error("Request not found.");
   }
   if (request.lineItems.length === 0) {
-    throw new Error("Add at least one line item before submitting.");
+    throw new Error("Add at least one item before submitting.");
   }
   if (!request.bankDetails) {
     throw new Error("Add bank details before submitting.");
@@ -850,13 +850,50 @@ export async function removeLineItem(lineItemId: string, requesterId: string): P
     lineItem.request.requesterId !== requesterId ||
     !isEditableStatus(lineItem.request.status)
   ) {
-    throw new Error("Line item not found.");
+    throw new Error("Item not found.");
   }
   await prisma.$transaction([
     prisma.lineItem.delete({ where: { id: lineItemId } }),
     prisma.reimbursementRequest.update({
       where: { id: lineItem.reimbursementRequestId },
       data: { totalAmount: { decrement: lineItem.amount } },
+    }),
+  ]);
+}
+
+// Edits an existing line item's description/amount in place -- the fix for
+// an auto-scanned "<merchant> | <item>" description that OCR got wrong
+// (common enough, given how much real receipt/invoice layouts vary, that
+// remove-and-re-add alone wasn't enough). totalAmount is adjusted by the
+// delta between the old and new amount, not re-derived from a fresh sum,
+// for the same reason addLineItem/removeLineItem do it that way -- keeps
+// both writes in the transaction independent of each other.
+export async function updateLineItem(
+  lineItemId: string,
+  requesterId: string,
+  description: string,
+  amount: number,
+): Promise<void> {
+  const lineItem = await prisma.lineItem.findUnique({
+    where: { id: lineItemId },
+    include: { request: true },
+  });
+  if (
+    !lineItem ||
+    lineItem.request.requesterId !== requesterId ||
+    !isEditableStatus(lineItem.request.status)
+  ) {
+    throw new Error("Item not found.");
+  }
+  const delta = amount - Number(lineItem.amount);
+  await prisma.$transaction([
+    prisma.lineItem.update({
+      where: { id: lineItemId },
+      data: { description, amount },
+    }),
+    prisma.reimbursementRequest.update({
+      where: { id: lineItem.reimbursementRequestId },
+      data: { totalAmount: { increment: delta } },
     }),
   ]);
 }
