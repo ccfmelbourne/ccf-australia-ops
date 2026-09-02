@@ -222,6 +222,22 @@ function CreateStep({ onCreated }: { onCreated: (data: DraftRequestView) => void
   const [ministryType, setMinistryType] = useState<MinistryTypeValue | "">("");
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  // The X/Escape/backdrop close isn't gated by isPending (unlike the
+  // Continue button), so a fast close while createDraftRequestForDrawerAction
+  // is still in flight is reachable: the drawer fully unmounts (RequestsTable
+  // resets `creating`), but the in-flight promise keeps running regardless
+  // and, on resolving, would otherwise still call onCreated -- which
+  // reopens the drawer on a request the requester just tried to cancel,
+  // and (since RequestsTable's own listing already filters out empty
+  // drafts) leaves an invisible orphaned row in the database if it
+  // doesn't. Tracked here rather than fixed by disabling the close button
+  // during creation, so closing stays responsive even if creation is slow.
+  const cancelledRef = useRef(false);
+  useEffect(() => {
+    return () => {
+      cancelledRef.current = true;
+    };
+  }, []);
 
   function handleContinue() {
     if (!requestType || !ministryType) return;
@@ -229,6 +245,10 @@ function CreateStep({ onCreated }: { onCreated: (data: DraftRequestView) => void
     startTransition(async () => {
       try {
         const result = await createDraftRequestForDrawerAction(requestType, ministryType);
+        if (cancelledRef.current) {
+          if (result.ok && result.id) void deleteRequestAction(result.id);
+          return;
+        }
         if (result.ok && result.id && result.voucherNo && result.requesterName) {
           onCreated({
             id: result.id,
@@ -246,7 +266,7 @@ function CreateStep({ onCreated }: { onCreated: (data: DraftRequestView) => void
           setError(result.error ?? "Something went wrong.");
         }
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Something went wrong.");
+        if (!cancelledRef.current) setError(err instanceof Error ? err.message : "Something went wrong.");
       }
     });
   }
@@ -625,8 +645,17 @@ function EditContent({ data, onClose }: { data: DraftRequestView; onClose: () =>
 function CreateWizard({ data, onClose }: { data: DraftRequestView; onClose: () => void }) {
   const router = useRouter();
   const sigPadRef = useRef<SignatureCanvas>(null);
-  const [currentStep, setCurrentStep] = useState<WizardStep>(1);
-  const [furthestStep, setFurthestStep] = useState<WizardStep>(1);
+  // Starts at step 2 (Expenses & Receipts), not step 1 (Details) -- by the
+  // time this renders, CreateStep has already collected an explicit
+  // request-type/ministry pick and created the draft with it, so re-showing
+  // the exact same two fields as "step 1" would just be the same screen
+  // twice with a Continue click doing nothing visible in between (reported
+  // live: "the panel does not move to the next step"). Step 1 is still
+  // reachable via the step pills, to go back and change that choice later
+  // -- furthestStep starts at 2 so that jump stays allowed (goTo only
+  // blocks going *ahead* of furthestStep).
+  const [currentStep, setCurrentStep] = useState<WizardStep>(2);
+  const [furthestStep, setFurthestStep] = useState<WizardStep>(2);
   const [isSubmitPending, startSubmitTransition] = useTransition();
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [showConfirm, setShowConfirm] = useState(false);
