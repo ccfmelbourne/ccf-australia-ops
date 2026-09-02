@@ -126,7 +126,7 @@ export function ApprovalDrawer({
           </dl>
 
           <div className="py-6">
-            <SectionHeading>Line items</SectionHeading>
+            <SectionHeading>Items</SectionHeading>
             {approval.lineItems.length === 0 ? (
               <p className="text-sm text-slate-500">None.</p>
             ) : (

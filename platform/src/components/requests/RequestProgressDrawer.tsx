@@ -196,7 +196,7 @@ export function RequestProgressDrawer({
           </dl>
 
           <div className="py-6">
-            <SectionHeading>Line items</SectionHeading>
+            <SectionHeading>Items</SectionHeading>
             {data.lineItems.length === 0 ? (
               <p className="text-sm text-slate-500">None.</p>
             ) : (
