@@ -617,3 +617,57 @@ since they have different named approvers.
   check added in slice 9 is temporarily relaxed back to optional (commented out, not deleted) —
   decision-maker call to revert it to required before the official testing phase begins, same
   pattern as the deferred BankDetails field-level encryption.
+
+## Slice 11: Design System, Dialog Extraction, App Shell (2026-09-02 – 2026-09-03)
+
+- **Reminder emails + drawer Close button.** Stale-draft reminders (3-day/7-day) and pending-
+  approval reminders (2/5/7-day), both via new Vercel Cron jobs; a day-0 "approval needed" email
+  now fires when a role first becomes actionable (previously approvers got no email at all). A
+  secondary Close button was added alongside each wizard step's own action row after backdrop-
+  click-to-close was removed (stray clicks were dismissing the panel with a form half-filled).
+- **Design system.** Scoped as a documentation-and-adoption pass, not a rebuild: Storybook
+  already had `Foundations/{Colors,Spacing,Typography}` and four `Patterns/*` flow stories before
+  this slice touched anything. Added the two missing Foundations pages (`Radius`, `Shadows`) and
+  five missing Patterns pages (`FormSections`, `EmptyStates`, `LoadingStates`, `ErrorStates`,
+  `ConfirmationStates`). `Button`/`Input` existed but were undapted at 6–7 real call sites
+  (`ReceiptManager`, `LineItemManager`, `RequestDrawer`, etc.) — adopted there. Built and adopted
+  five new components grounded in already-repeated patterns (`Select`, `Card`, `Badge`, `Alert`,
+  `Table`), plus `FileDropzone` (extracted `ReceiptManager`'s drag-and-drop into its own
+  documented component). No new dependencies added anywhere in this slice.
+- **`Dialog` component + adoption.** Extracted the native-`<dialog>` shell duplicated three ways
+  across `RequestDrawer`/`ApprovalDrawer`/`RequestProgressDrawer` into one `Dialog` component,
+  documented in Storybook first and adopted into all three only after live verification, given
+  this exact code's history of subtle bugs. Its `close()` is exposed via a `closeRef` the caller
+  reads from anywhere (not a render-prop) specifically so `ApprovalDrawer`'s decide/reject
+  handlers — top-level async functions, not inline JSX — can call it.
+- **Three real bugs found and fixed along the way, each confirmed live before/after:**
+  - Cancel on "Submit reimbursement?" closed the *entire* drawer, not just the confirmation. The
+    confirmation was a second native `<dialog>` nested inside the first; closing it fired the
+    *outer* dialog's native close event too — a genuine browser behavior in the modal-dialog
+    stack (confirmed via an instrumented `.close()` + stack trace: nothing ever called it on the
+    outer dialog). Fixed by replacing the nested dialog with a plain overlay instead of a second
+    competing modal.
+  - All three drawer panels had been rendering flush *left* the whole time despite `right-0` in
+    their className — the browser's own `dialog:modal` stylesheet sets `left:0`, which wins in
+    LTR when the box is otherwise over-constrained. Invisible until the confirmation-popup fix
+    above made the mismatch visible. Decision-maker's call, once found: keep panels left-aligned
+    going forward rather than force them back to the (never-actually-rendered) right side.
+  - Removing the only receipt or line item, then clicking Continue, could bypass that step's own
+    requirement — removal is an async round-trip, and the gating read the not-yet-updated prop
+    with no signal a removal was still in flight. Fixed via an `onPendingChange` callback from
+    `ReceiptManager`/`LineItemManager` up to the wizard step. Has a Storybook regression test
+    (`Patterns/ExpensesStepRace`) — verified it actually fails when the fix is reverted.
+- **App shell.** Replaced the old header-only shell (`AppHeader.tsx`, one nav-free page) with a
+  sidebar + header shell (`AppShell`/`Sidebar`/`MobileNav`/`NotificationBell`/`UserMenu` under
+  `platform/src/components/shell/`), a new `(app)` route group for the auth guard + shared shell,
+  and a new `/dashboard` home page (stat cards, recent requests). `NotificationBell` shows the
+  signed-in user's real pending-approval count (capped `9+`), not a decorative badge.
+  - **Reverses a decision recorded in slice 10**, worth being explicit about: slice 10 explicitly
+    combined Approvals and My Requests onto one `/requests` page *because* one person can be both
+    a requester and an approver, and there was no nav to switch between two routes at the time.
+    This slice splits them back into separate `/dashboard`/`/requests`/`/approvals` routes. The
+    original problem doesn't reproduce the same way now — the new sidebar makes switching between
+    them one click, unlike the old flat page with no navigation at all — but this is a considered
+    reversal made without re-reading slice 10 first, not a decision that re-derived the original
+    tradeoff from scratch. Flagging it here so a future slice doesn't re-litigate this blind.
+  - `Settings` was deliberately left out of the sidebar (no feature exists yet to back it).
