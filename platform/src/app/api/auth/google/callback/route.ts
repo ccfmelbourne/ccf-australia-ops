@@ -38,5 +38,5 @@ export async function GET(request: NextRequest) {
 
   await createUserSession(user.id);
 
-  return NextResponse.redirect(new URL("/requests", request.url));
+  return NextResponse.redirect(new URL("/dashboard", request.url));
 }
