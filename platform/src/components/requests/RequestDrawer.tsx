@@ -517,6 +517,15 @@ function EditContent({ data, onClose }: { data: DraftRequestView; onClose: () =>
   const [isSubmitPending, startSubmitTransition] = useTransition();
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [showConfirm, setShowConfirm] = useState(false);
+  // A line-item/receipt remove (or a receipt upload) is a server
+  // round-trip followed by router.refresh() -- until that resolves, `data`
+  // still reflects the pre-mutation state. Without this, removing the
+  // only receipt/item and clicking Submit in that window passed
+  // getSubmitBlockingError's check on stale data and opened the confirm
+  // dialog for a request that no longer actually qualified -- found live.
+  const [lineItemsBusy, setLineItemsBusy] = useState(false);
+  const [receiptsBusy, setReceiptsBusy] = useState(false);
+  const stepBusy = lineItemsBusy || receiptsBusy;
 
   function handleSubmitClick() {
     setSubmitError(null);
@@ -583,10 +592,11 @@ function EditContent({ data, onClose }: { data: DraftRequestView; onClose: () =>
             requestId={data.id}
             lineItems={data.lineItems}
             totalAmount={data.totalAmount}
+            onPendingChange={setLineItemsBusy}
           />
         </div>
         <div className="py-6">
-          <ReceiptManager requestId={data.id} receipts={data.receipts} />
+          <ReceiptManager requestId={data.id} receipts={data.receipts} onPendingChange={setReceiptsBusy} />
         </div>
         <div className="pt-6">
           <BankDetailsManager requestId={data.id} bankDetails={data.bankDetails} />
@@ -598,7 +608,7 @@ function EditContent({ data, onClose }: { data: DraftRequestView; onClose: () =>
         {submitError && <ErrorBanner message={submitError} />}
         <div className="flex justify-between">
           <CloseButton onClose={onClose} />
-          <Button disabled={isSubmitPending} onClick={handleSubmitClick}>
+          <Button disabled={isSubmitPending || stepBusy} onClick={handleSubmitClick}>
             {data.returnReason ? "Resubmit" : "Submit"}
           </Button>
         </div>
@@ -648,6 +658,18 @@ function CreateWizard({ data, onClose }: { data: DraftRequestView; onClose: () =
   const [isSubmitPending, startSubmitTransition] = useTransition();
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [showConfirm, setShowConfirm] = useState(false);
+  // A line-item/receipt remove (or a receipt upload) is a server
+  // round-trip followed by router.refresh() -- until that resolves, `data`
+  // still reflects the pre-mutation state. Without this, removing the
+  // only receipt/item and clicking Continue in that window advanced past
+  // this step on stale data, with zero items/receipts actually attached
+  // -- found live. Only gates this step's own Continue button (see
+  // canContinueFromExpenses below) -- step 4's Submit doesn't need the
+  // same guard, since Continue being disabled here already makes it
+  // impossible to reach step 4 while a step-2 mutation is still pending.
+  const [lineItemsBusy, setLineItemsBusy] = useState(false);
+  const [receiptsBusy, setReceiptsBusy] = useState(false);
+  const stepBusy = lineItemsBusy || receiptsBusy;
 
   function goTo(step: WizardStep) {
     if (step > furthestStep) return;
@@ -711,7 +733,7 @@ function CreateWizard({ data, onClose }: { data: DraftRequestView; onClose: () =
   // own check, request-data.ts).
   const receiptRequired = data.requestType !== "CASH_ADVANCE";
   const canContinueFromExpenses =
-    data.lineItems.length > 0 && (!receiptRequired || data.receipts.length > 0);
+    data.lineItems.length > 0 && (!receiptRequired || data.receipts.length > 0) && !stepBusy;
   const canContinueFromPayment = data.bankDetails !== null;
 
   const backButton = (
@@ -742,10 +764,15 @@ function CreateWizard({ data, onClose }: { data: DraftRequestView; onClose: () =
         <>
           <div className="flex flex-col divide-y divide-slate-200">
             <div className="pb-6">
-              <LineItemManager requestId={data.id} lineItems={data.lineItems} totalAmount={data.totalAmount} />
+              <LineItemManager
+                requestId={data.id}
+                lineItems={data.lineItems}
+                totalAmount={data.totalAmount}
+                onPendingChange={setLineItemsBusy}
+              />
             </div>
             <div className="pt-6">
-              <ReceiptManager requestId={data.id} receipts={data.receipts} />
+              <ReceiptManager requestId={data.id} receipts={data.receipts} onPendingChange={setReceiptsBusy} />
             </div>
           </div>
           <div className="flex flex-col gap-2">
@@ -758,7 +785,7 @@ function CreateWizard({ data, onClose }: { data: DraftRequestView; onClose: () =
                 Continue →
               </Button>
             </div>
-            {!canContinueFromExpenses && (
+            {!canContinueFromExpenses && !stepBusy && (
               <p className="text-right text-xs text-slate-500">
                 {data.lineItems.length === 0
                   ? "Add at least one expense to continue."
