@@ -32,12 +32,10 @@ const requestDetailsSchema = z.object({
 });
 
 // Returns the new id AND voucherNo (not just id) so the caller can build
-// the drawer's edit-mode view entirely client-side, instead of navigating
-// via router.push and waiting on a server round-trip through
-// getDraftRequest just to get back data the caller already has (a fresh
-// draft has no line items/receipts/bank details yet) -- that round-trip
-// was creating a visible gap where neither the "creating" nor "editing"
-// drawer content was mounted, which unmounted and remounted the dialog.
+// the drawer's edit-mode view entirely client-side instead of navigating
+// via router.push and round-tripping through getDraftRequest for data it
+// already has -- that round-trip visibly unmounted and remounted the
+// dialog (found live).
 export async function createDraftRequestForDrawerAction(
   requestType: string,
   ministryType: string,
@@ -53,13 +51,11 @@ export async function createDraftRequestForDrawerAction(
   }
 
   // Unlike every other action in this file, this one previously had no
-  // try/catch -- a thrown error (a DB hiccup, anything) rejected the
-  // Server Action call itself instead of resolving with { ok: false }.
-  // CreateStep's effect has no catch of its own around this await either,
-  // so the rejection went nowhere useful: no error state ever got set, no
-  // ErrorBanner ever showed, and the drawer was left looking like it had
-  // simply failed to open. Wrapping it here is what makes that existing
-  // ErrorBanner path actually reachable for a real backend failure.
+  // try/catch -- a thrown error rejected the Server Action call itself
+  // instead of resolving { ok: false }, and CreateStep's effect has no
+  // catch of its own, so the drawer was left looking like it simply
+  // failed to open. Wrapping it here makes the existing ErrorBanner path
+  // reachable for a real backend failure.
   try {
     const { id, voucherNo, requesterName } = await createDraftRequest(
       userId,
@@ -143,15 +139,12 @@ const lineItemSchema = z.object({
   amount: z.coerce.number().positive("Amount must be greater than 0"),
 });
 
-// Called imperatively from a client component (StatusTransitionForm.tsx's
-// existing pattern), not via a native <form action={...}>, and returns a
-// result rather than redirecting: the caller is always already on
-// /requests/[id] (this is an in-place edit, not a navigation), and a
-// Server Action redirecting back to the exact page it was submitted from
-// doesn't reliably bust the client Router Cache in this Next.js version --
-// confirmed live (server data was correct via a direct fetch, but the
-// browser kept showing the pre-mutation page). The client component calls
-// router.refresh() on success instead.
+// Called imperatively from a client component, not via a native <form
+// action={...}>, and returns a result rather than redirecting -- a Server
+// Action redirecting back to the exact page it was submitted from doesn't
+// reliably bust the client Router Cache in this Next.js version (confirmed
+// live: server data was correct, but the browser kept showing the
+// pre-mutation page). The client component calls router.refresh() instead.
 export async function addLineItemAction(
   requestId: string,
   description: string,
@@ -190,10 +183,9 @@ export async function removeLineItemAction(
   }
 }
 
-// The fix for an auto-scanned line item OCR got wrong -- common enough
-// (real receipt/invoice layouts vary a lot more than the happy path
-// assumes) that remove-and-re-add alone wasn't a good enough correction
-// path.
+// The fix for an auto-scanned line item OCR got wrong -- real receipt/
+// invoice layouts vary enough that remove-and-re-add alone wasn't good
+// enough.
 export async function updateLineItemAction(
   lineItemId: string,
   description: string,
@@ -219,18 +211,13 @@ export async function updateLineItemAction(
 
 // Upload, with scanning as an opt-out (a "scan" field on formData, read
 // as anything other than the literal string "false") rather than a
-// separate manual "Scan" step -- confirmed with the decision-maker after
-// a report that auto-scanning every upload got "annoying" for receipts
-// the requester never wanted turned into a line item automatically. A
-// scan failure never blocks the upload itself (the receipt is still
-// attached either way); a scan that can't find both a merchant and a
-// valid amount leaves the receipt unscanned (extractedMerchant/
-// extractedAmount/scannedAt all null) rather than inventing partial
-// data, and the requester adds that line item manually, same as always.
-// When both are found, the line item is created automatically --
-// confirmed 2026-09-02 with the decision-maker as a deliberate reversal
-// of this module's original "OCR never writes without human
-// confirmation" rule (see receipt-extraction/types.ts).
+// separate manual "Scan" step. A scan failure never blocks the upload; a
+// scan that can't find both a merchant and a valid amount leaves the
+// receipt unscanned rather than inventing partial data, and the requester
+// adds that line item manually. When both are found, the line item is
+// created automatically -- a deliberate reversal of this module's
+// original "OCR never writes without human confirmation" rule (see
+// receipt-extraction/types.ts).
 export async function uploadReceiptAction(
   requestId: string,
   formData: FormData,

@@ -137,9 +137,9 @@ export async function deleteReceipt(storageKey: string): Promise<void> {
   await getClient().send(new DeleteObjectCommand({ Bucket: getBucketName(), Key: storageKey }));
 }
 
-// Fetches the actual file bytes -- used for server-side processing (e.g.
-// feeding the receipt to Claude for scanning), not for showing it to a
-// browser (that's getReceiptDownloadUrl's job).
+// Fetches the actual file bytes -- used for server-side processing (Google
+// Vision OCR, embedding into the voucher PDF/email), not for showing it to
+// a browser (that's getReceiptDownloadUrl's job).
 export async function downloadReceiptBytes(
   storageKey: string,
 ): Promise<{ buffer: Buffer; contentType: string }> {

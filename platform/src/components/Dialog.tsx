@@ -10,32 +10,26 @@ export interface DialogProps {
   onClose: () => void;
   children: ReactNode;
   // Re-runs the showModal() effect when it changes, instead of only once
-  // on mount -- RequestDrawer deliberately reuses one <Dialog> instance
-  // across its create -> edit handoff (see RequestDrawer.tsx's own
-  // sessionKey comment for why: a fast close-then-reopen can land as new
-  // props on the same instance, and an effect keyed on [] would silently
-  // never reopen it). Omit it for a panel that's always freshly mounted
-  // per session (ApprovalDrawer, RequestProgressDrawer) -- it then
-  // defaults to a stable value, i.e. functionally just [].
+  // on mount -- RequestDrawer reuses one <Dialog> instance across its
+  // create -> edit handoff (see RequestDrawer.tsx's sessionKey comment), so
+  // an effect keyed on [] alone would silently never reopen it for a fast
+  // close-then-reopen. Omit it for a panel always freshly mounted per
+  // session (ApprovalDrawer, RequestProgressDrawer).
   resetKey?: string | number;
   // Filled in with a stable close() function once the dialog mounts, via
-  // an effect rather than during render -- every real panel needs to
-  // trigger a close from places besides a plain JSX onClick (a Close
-  // button reachable after scrolling, an async action's success path,
-  // RequestDrawer's own empty-draft cleanup on close), so this is a ref
-  // the caller creates and reads from wherever it needs to, rather than
-  // a callback threaded through every intermediate function.
+  // an effect rather than during render -- lets a caller trigger close
+  // from places besides a plain JSX onClick (an async action's success
+  // path, empty-draft cleanup) without threading a callback through every
+  // intermediate function.
   closeRef?: RefObject<(() => void) | null>;
 }
 
-// The native <dialog> shell every side panel in the app already uses
+// The native <dialog> shell every side panel in the app uses
 // (RequestDrawer, ApprovalDrawer, RequestProgressDrawer): shown via
-// showModal() on mount, a left-aligned panel that's full-width on small
-// viewports (max-w-xl caps it on wide ones), no backdrop-click-to-close
-// (closedby="none" -- confirmed with the decision-maker after a report of
-// accidentally closing a panel via a stray click near its edge), and a
-// header row with a title, an optional badge, and the X that's the
-// primary way to dismiss it.
+// showModal() on mount, a left-aligned panel full-width on small
+// viewports, no backdrop-click-to-close (closedby="none", after a report
+// of accidentally closing a panel via a stray click near its edge), and a
+// header row with a title, an optional badge, and the X to dismiss it.
 export function Dialog({ titleId, title, badge, onClose, children, resetKey, closeRef }: DialogProps) {
   const dialogRef = useRef<HTMLDialogElement>(null);
 

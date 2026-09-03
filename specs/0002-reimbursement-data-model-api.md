@@ -47,7 +47,7 @@ User ──────────────┬──────────
   the tier + ministry-group rules already piloted and tested in
   `mvp/reimbursement-voucher/js/approval-rules.js`.
 - **RegionalDirectorOverride** / **OverrideApproval** — the confirmed >$5,000 override path
-  (Ross Callado, Joel Jerez, Vamie Pinlac unanimous, within-budget only) — see "Approval branching"
+  (Alex Approver, Jordan Reyes, Morgan Cruz unanimous, within-budget only) — see "Approval branching"
   below for why this needs its own model rather than fitting into `RequiredApproval` directly.
 - **AuditLogEntry** — append-only record of every state-changing action on a request, satisfying
   spec 0001's audit trail requirement.
@@ -192,8 +192,8 @@ model RegionalDirectorOverride {
   approvals              OverrideApproval[]
 }
 
-// Exactly three rows expected per override, one each for Ross Callado, Joel Jerez, and
-// Vamie Pinlac specifically — not "any 3 COS." Enforce the fixed-identity constraint in
+// Exactly three rows expected per override, one each for Alex Approver, Jordan Reyes, and
+// Morgan Cruz specifically — not "any 3 COS." Enforce the fixed-identity constraint in
 // application logic (Prisma alone won't express "must be exactly these 3 users").
 model OverrideApproval {
   id            String                    @id @default(cuid())
@@ -224,8 +224,8 @@ model AuditLogEntry {
 Per spec 0001, a tier-4 (>$5,000) request needs: **2 COS + Finance Overseer (from the request's
 own ministry group)**, **AND** one of two alternatives:
 
-- Regional Director (Ptr. Ryan Escobar) approves directly, **or**
-- All three named COS (Ross Callado, Joel Jerez, Vamie Pinlac) unanimously approve the override,
+- Regional Director (Ptr. Robin Domingo) approves directly, **or**
+- All three named COS (Alex Approver, Jordan Reyes, Morgan Cruz) unanimously approve the override,
   conditioned on the request being within the approved budget plan.
 
 This is a genuine **OR** in the requirement, not just a longer checklist — `RequiredApproval`
@@ -322,7 +322,7 @@ implementation. Differences worth folding back in:
   person. See `.ai/WORKLOG.md` Slice 10 for the full mapping and reasoning.
 - Multi-ministry-group membership is moot now that assignment is per-ministry-type rather than
   per-group — a person can already be the named approver for more than one ministry type (e.g.
-  Ross Callado covers Admin, Exalt/Live Prod, and Pastoral Care) without any special modeling.
+  Alex Approver covers Admin, Exalt/Live Prod, and Pastoral Care) without any special modeling.
 - Receipt handling: virus/malware scanning on upload, accepted file types/size limits — still not
   addressed. Slice 1 only *displays* receipts (`RequestDetailView`) via a seeded `storageKey`;
   there is no upload UI or upload action yet in the implementation to validate this against.

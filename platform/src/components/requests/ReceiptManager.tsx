@@ -24,14 +24,11 @@ export function ReceiptManager({
 }: {
   requestId: string;
   receipts: DraftReceiptView[];
-  // Reports this component's own isPending upward -- a remove (or an
-  // upload) is a server round-trip followed by router.refresh(), and
-  // until that resolves, the `receipts` prop is still the pre-mutation
-  // value. A wizard step's own Continue button gates on receipts.length
-  // alone, so without this, removing the only receipt and clicking
-  // Continue in that window advanced to the next step with none attached
-  // -- found live. The caller factors this into its own gating instead
-  // of this component trying to disable buttons outside itself.
+  // Reports this component's own isPending upward -- a remove (or upload)
+  // is a server round-trip followed by router.refresh(), so until that
+  // resolves the `receipts` prop is stale. Without this, removing the
+  // only receipt and clicking Continue in that window advanced past the
+  // step with none attached (found live).
   onPendingChange?: (pending: boolean) => void;
 }) {
   const router = useRouter();
@@ -41,30 +38,22 @@ export function ReceiptManager({
   useEffect(() => {
     onPendingChange?.(isPending);
   }, [isPending, onPendingChange]);
-  // Scanning defaults on (the previous always-on behavior), but reported
-  // as "annoying" when a requester just wants to attach a receipt without
-  // it turning into an auto-created line item -- this lets them opt out
-  // per upload rather than removing the auto-created item afterward.
+  // Scanning defaults on, but lets a requester opt out per upload rather
+  // than removing an auto-created line item afterward when they just
+  // wanted to attach a receipt.
   const [scanEnabled, setScanEnabled] = useState(true);
   // Inline error state, not a toast -- ReceiptManager always renders inside
-  // a native <dialog> (RequestDrawer.tsx), which the browser promotes to
-  // the "top layer" the instant it's opened via showModal(). Anything in
-  // the top layer renders above *all* regular-positioned content
-  // regardless of z-index, so a toast fired while the dialog is open would
-  // render behind it -- invisible to the user. Inline text inside the
-  // dialog's own DOM doesn't have this problem.
+  // a native <dialog>, which the browser promotes to the "top layer" once
+  // opened via showModal(). Anything in the top layer renders above all
+  // regular content regardless of z-index, so a toast fired while the
+  // dialog is open would render behind it, invisible to the user.
   const [error, setError] = useState<string | null>(null);
 
-  // Each file is uploaded (and, unless scanEnabled is off, scanned) in one
-  // combined call (uploadReceiptAction), processed sequentially rather
-  // than all at once -- a clean, ordered per-file status instead of a
-  // burst of concurrent uploads racing each other. router.refresh() after
-  // each one so cards appear one by one as they finish. The "scanning"
-  // label swap is purely cosmetic (there's no real per-phase signal from
-  // one combined server call) -- it just gives a sense of progress rather
-  // than a single opaque "working..." the whole time, and is skipped
-  // entirely when scanning is off, since nothing happens after the upload
-  // in that case.
+  // Each file is uploaded (and scanned, unless scanEnabled is off) in one
+  // combined call, processed sequentially rather than all at once, with
+  // router.refresh() after each so cards appear one by one. The
+  // "scanning" label swap is purely cosmetic (no real per-phase signal
+  // from one combined server call) and skipped when scanning is off.
   async function processFiles(withIds: { file: File; tempId: string }[]) {
     for (const { file, tempId } of withIds) {
       const scanningTimer = scanEnabled
@@ -90,15 +79,12 @@ export function ReceiptManager({
     }
   }
 
-  // Adds each file to `processing` synchronously, outside of
-  // startTransition, before kicking off the actual upload work inside it
-  // -- a state update made *inside* a transition callback is itself
-  // treated as low-priority transition work, so the "Uploading…" card
-  // and button text could lag well behind the button's disabled state
-  // (which comes from useTransition's own isPending and updates
-  // instantly) -- found live: the button visibly disabled right away but
-  // kept reading "Upload receipts" for a beat. Doing the add here first
-  // means the loading state shows the instant files are chosen.
+  // Adds each file to `processing` synchronously, outside startTransition,
+  // before kicking off the upload work inside it -- a state update made
+  // inside a transition is itself low-priority, so the "Uploading…" text
+  // could lag behind the button's disabled state (found live). Doing the
+  // add here first means the loading state shows the instant files are
+  // chosen.
   function addFilesAndProcess(files: File[]) {
     setError(null);
     const withIds = files.map((file) => ({
@@ -151,14 +137,11 @@ export function ReceiptManager({
         multiple
         disabled={isPending}
         onFilesSelected={addFilesAndProcess}
-        // Files are processed one at a time (processFiles awaits each
-        // upload/scan before starting the next), so `processing` only
-        // ever holds 0 or 1 entry -- reflecting its status right on the
-        // button the requester just clicked, not just in the card further
-        // down the form, since that card can be scrolled out of view on a
-        // long form and easy to miss (found live: a report of "no
-        // loader" during upload -- the card was there, just not where
-        // attention already was).
+        // Files are processed one at a time, so `processing` only ever
+        // holds 0 or 1 entry -- reflecting status on the button the
+        // requester just clicked, not just in a card that can scroll out
+        // of view on a long form (found live: a report of "no loader"
+        // during upload, when the card was just out of sight).
         buttonLabel={
           processing.length > 0
             ? processing[0].status === "scanning"

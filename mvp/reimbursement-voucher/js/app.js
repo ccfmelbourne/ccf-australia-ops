@@ -840,11 +840,11 @@ function downloadPDF(data, lines, total, tierLbl, approvers, areaText, miniText,
     </tr>
     <tr>
       <td style="background:#f8fafc;font-weight:700;color:#00919b;font-size:7.5pt;padding:6px 8px;text-transform:uppercase;">Name</td>
-      <td style="background:#f8fafc;font-size:7.5pt;padding:6px 8px;text-align:center;">Ross Callado</td>
-      <td style="background:white;font-size:7.5pt;padding:6px 8px;text-align:center;">Joel Jerez</td>
-      <td style="background:#f8fafc;font-size:7.5pt;padding:6px 8px;text-align:center;">Vamie Pinlac /<br>Robert Cruz /<br>Joshua Mangalong</td>
-      <td style="background:white;font-size:7.5pt;padding:6px 8px;text-align:center;">Dexter Santiago /<br>Moriz Manlangit</td>
-      <td style="background:#f8fafc;font-size:7.5pt;padding:6px 8px;text-align:center;">Ptr. Ryan Escobar</td>
+      <td style="background:#f8fafc;font-size:7.5pt;padding:6px 8px;text-align:center;">Alex Approver</td>
+      <td style="background:white;font-size:7.5pt;padding:6px 8px;text-align:center;">Jordan Reyes</td>
+      <td style="background:#f8fafc;font-size:7.5pt;padding:6px 8px;text-align:center;">Morgan Cruz /<br>Casey Reyes /<br>Riley Navarro</td>
+      <td style="background:white;font-size:7.5pt;padding:6px 8px;text-align:center;">Taylor Santos /<br>Sam Delgado</td>
+      <td style="background:#f8fafc;font-size:7.5pt;padding:6px 8px;text-align:center;">Ptr. Robin Domingo</td>
     </tr>`;
 
   const w = window.open('', '_blank');
@@ -1201,11 +1201,11 @@ function downloadPDFFile(data, lines, total, tierLbl, approvers, areaText, miniT
       <tbody>
         <tr>
           <td style="background:#f8fafc;font-weight:700;color:#00919b;text-align:left;">Name</td>
-          <td style="background:#f8fafc;">Ross Callado</td>
-          <td style="background:white;">Joel Jerez</td>
-          <td style="background:#f8fafc;">Vamie Pinlac / Robert Cruz / Joshua Mangalong</td>
-          <td style="background:white;">Dexter Santiago / Moriz Manlangit</td>
-          <td style="background:#f8fafc;">Ptr. Ryan Escobar</td>
+          <td style="background:#f8fafc;">Alex Approver</td>
+          <td style="background:white;">Jordan Reyes</td>
+          <td style="background:#f8fafc;">Morgan Cruz / Casey Reyes / Riley Navarro</td>
+          <td style="background:white;">Taylor Santos / Sam Delgado</td>
+          <td style="background:#f8fafc;">Ptr. Robin Domingo</td>
         </tr>
       </tbody>
     </table>

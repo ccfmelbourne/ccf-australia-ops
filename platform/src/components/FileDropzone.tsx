@@ -14,12 +14,10 @@ export interface FileDropzoneProps {
 }
 
 // A drag-and-drop zone plus a hidden native file input triggered by a
-// visible button -- extracted out of ReceiptManager, the app's only file
-// upload flow so far, as the canonical, reusable version. Deliberately
-// stateless about the files once they're selected (no preview grid, no
-// per-file progress) -- that's specific to what the caller does with them
-// (ReceiptManager's own upload+scan pipeline), not something a generic
-// dropzone should own.
+// visible button. Deliberately stateless about the files once selected --
+// no preview grid, no per-file progress -- since that's specific to what
+// the caller does with them (ReceiptManager's own upload+scan pipeline),
+// not something a generic dropzone should own.
 export function FileDropzone({
   accept,
   multiple,

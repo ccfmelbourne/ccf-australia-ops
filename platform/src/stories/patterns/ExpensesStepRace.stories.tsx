@@ -2,30 +2,18 @@ import { useState } from "react";
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 import { within, userEvent, waitFor, expect } from "storybook/test";
 
-// Regression test for a real, live-reported bug: the wizard's Expenses &
-// Receipts step gated its "Continue" button on lineItems.length/
-// receipts.length read straight from the last-known data -- but removing
-// a receipt (or line item) is a server round-trip followed by
-// router.refresh(), and the button had no way to know a removal was still
-// in flight. Clicking Continue in that window advanced to the next step
-// with the requirement no longer actually met (found live: upload a
-// receipt, add an item, remove the receipt, click Continue immediately --
-// it let you through with zero receipts attached). Fixed by having
-// ReceiptManager/LineItemManager report their own isPending upward via an
-// onPendingChange prop, which RequestDrawer.tsx's CreateWizard factors
-// into canContinueFromExpenses.
+// Regression test for a real bug: Continue was gated on stale
+// lineItems.length/receipts.length while a removal's router.refresh() was
+// still in flight, letting a click through with the requirement unmet
+// (found live). Fixed via an onPendingChange prop that
+// ReceiptManager/LineItemManager report upward.
 //
-// This drives a small simulator, not the real CreateWizard/ReceiptManager
-// -- those call real Server Actions with no server/database behind them
-// in Storybook's Vite runtime (see Patterns/ReimbursementForm's own
-// comment). The simulator's "remove" deliberately resolves after a delay
-// instead of synchronously, to reproduce the actual timing gap the real
-// bug lived in -- a synchronous fake remove could never race the button
-// at all, which would defeat the point of this test. This proves the
-// *pattern* (a busy flag from an in-flight removal must gate Continue) is
-// correct and stays correct; it is not, on its own, proof that the real
-// RequestDrawer.tsx still implements it the same way -- that still needs
-// a real end-to-end check against the actual app.
+// IMPORTANT LIMITATION: drives a small simulator, not the real
+// CreateWizard/ReceiptManager (which call Server Actions with no
+// server/database in Storybook's Vite runtime). The simulator's "remove"
+// resolves after a delay, not synchronously, to actually reproduce the
+// timing gap. Proves the *pattern* is correct, not that RequestDrawer.tsx
+// still implements it the same way -- that needs a real end-to-end check.
 function ExpensesStepSimulator() {
   const [lineItems] = useState([{ id: "1", description: "Taxi fare", amount: "45.00" }]);
   const [receipts, setReceipts] = useState([{ id: "1", filename: "taxi-receipt.jpg" }]);

@@ -26,23 +26,18 @@ export function RequestsTable({
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   // Holds the full view for a request just created in this drawer, so the
-  // create -> edit transition doesn't have to wait on the router.push below
-  // to actually resolve and re-fetch openRequest from the server before
-  // showing anything -- a fresh draft's shape (no line items/receipts/bank
-  // details/return reason yet) is already fully known the moment creation
-  // succeeds. Without this, there was a render where neither `creating` nor
-  // `openRequest` was set, which unmounted and remounted the dialog --
-  // visible as the panel closing and reopening. Superseded automatically
-  // once the real openRequest arrives from the server (see below).
+  // create -> edit transition doesn't wait on the router.push below to
+  // resolve and re-fetch openRequest -- a fresh draft's shape is already
+  // fully known the moment creation succeeds. Without this, a render where
+  // neither `creating` nor `openRequest` was set unmounted and remounted
+  // the dialog (visible as closing and reopening). Superseded automatically
+  // once the real openRequest arrives from the server.
   const [justCreated, setJustCreated] = useState<DraftRequestView | null>(null);
   // The step-by-step wizard is only for the live moment right after
-  // clicking "Create Request" -- true from handleCreated onward (through
-  // the justCreated -> openRequest handoff above, which doesn't touch
-  // this), reset to false the instant the user does anything else
-  // (clicks Edit on a row, or closes the drawer). Clicking "Edit" always
-  // shows the flat layout, even for a draft that was never submitted --
-  // confirmed with the decision-maker after the wizard's first version
-  // wrongly kept showing it on every reopen of an unsubmitted draft.
+  // clicking "Create Request" -- reset to false the instant the user does
+  // anything else. Clicking "Edit" always shows the flat layout, even for
+  // a never-submitted draft (an earlier version wrongly kept showing the
+  // wizard on every reopen).
   const [openedViaCreate, setOpenedViaCreate] = useState(false);
   // Deleting a request is permanent (line items/receipts/bank
   // details/approval history all go with it) -- clicking Delete arms this
@@ -192,17 +187,11 @@ export function RequestsTable({
       )}
 
       {/* One conditional expression, not two -- {a && <X/>} {b && <X/>} at
-          separate JSX positions would make React unmount the first
-          RequestDrawer and mount a brand-new one the instant `creating`
-          flips off and `effectiveOpenRequest` flips on, even though it's
-          conceptually the same dialog continuing into its next phase.
-          That's a real, visible bug: the dialog would close and reopen
-          (replaying its open animation) right as the draft finishes being
-          created -- found via the decision-maker watching it happen. A
-          single ternary at one position keeps it the same component
-          instance (same mounted <dialog>, same open animation played
-          once), so only its content swaps from the skeleton to the real
-          fields. */}
+          separate JSX positions would unmount the first RequestDrawer and
+          mount a new one the instant `creating` flips off and
+          `effectiveOpenRequest` flips on, replaying the open animation
+          right as the draft finishes being created (found live). A single
+          ternary keeps it the same component instance. */}
       {(creating || effectiveOpenRequest) &&
         (effectiveOpenRequest ? (
           <RequestDrawer

@@ -16,8 +16,8 @@ import type {
 import type { ApprovedRequestDetail } from "@/lib/request-data";
 
 // Per ADR 0001, email is a notification channel only — it tells a human
-// something needs their attention, it never carries the authoritative data.
-// A delivery failure here must never block whatever it's reporting on;
+// something needs attention, never carries the authoritative data. A
+// delivery failure here must never block whatever it's reporting on;
 // callers should catch and log rather than let a rejected promise stop
 // their flow.
 
@@ -50,12 +50,11 @@ function getFinanceNotificationEmail(): string {
   return to;
 }
 
-// Fetches each receipt's raw bytes once and embeds them into the voucher PDF
-// (voucher-pdf.tsx) -- one consolidated document, not a PDF plus a separate
-// copy of every receipt file. A raw attachment is only added back for a
-// receipt voucher-pdf.tsx couldn't embed (e.g. HEIC, listed by name on the
-// voucher page itself) -- that's the only way Finance can still get that
-// file. Never a link, always a real attachment.
+// Fetches each receipt's raw bytes once and embeds them into the voucher
+// PDF -- one consolidated document, not a PDF plus a separate copy of
+// every receipt file. A raw attachment is only added back for a receipt
+// voucher-pdf.tsx couldn't embed (e.g. HEIC) -- that's the only way
+// Finance can still get that file.
 export async function sendApprovedRequestEmail(detail: ApprovedRequestDetail): Promise<void> {
   const { subject, text } = buildApprovedRequestEmail(detail);
   const [receiptFiles, signaturesByRole, requesterSignature] = await Promise.all([
@@ -78,13 +77,10 @@ export async function sendApprovedRequestEmail(detail: ApprovedRequestDetail): P
       : Promise.resolve(null),
   ]);
   // An AUTO_SATISFIED approval (the requester is also that tier's
-  // designated approver -- request-data.ts's submitRequest) never has its
-  // own signatureStorageKey, since they never click "Approve" on their own
-  // request. Confirmed with the decision-maker: the voucher should still
-  // show a real signature there rather than leaving it blank, reusing the
-  // same one they already drew for "Requisitioned By" -- it's the same
-  // person's attestation either way, and this doesn't add a second signing
-  // action.
+  // designated approver) never has its own signatureStorageKey, since
+  // they never click "Approve" on their own request. The voucher still
+  // shows a real signature there by reusing the one they already drew for
+  // "Requisitioned By" -- the same person's attestation either way.
   for (const a of detail.approvals) {
     if (a.status === "AUTO_SATISFIED" && requesterSignature) {
       signaturesByRole.set(a.role, requesterSignature);

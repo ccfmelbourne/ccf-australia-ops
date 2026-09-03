@@ -27,14 +27,11 @@ export const APPROVER_ROLE_LABELS: Record<ApproverRoleValue, string> = {
   REGIONAL_DIRECTOR: "Regional Director",
 };
 
-// Oceania Regional's Ministry Overseer (Ptr. Ryan Escobar) is displayed as
-// "Regional Director" there rather than "Ministry Overseer" -- confirmed
-// with the decision-maker (2026-09-01), who wanted one consistent title
-// for him rather than two ("Regional Coordinator" for the ministry-level
-// role vs. "Regional Director" for the org-wide tier-4 role). Functionally
-// he's still the MINISTRY_OVERSEER role (same approval semantics, same
-// tier rules); only the display label differs for this one ministry, so
-// this stays a label override rather than a new ApproverRole.
+// Oceania Regional's Ministry Overseer displays as "Regional Director"
+// instead of "Ministry Overseer" -- one consistent title rather than two,
+// per the decision-maker. Functionally still MINISTRY_OVERSEER (same
+// approval semantics/tier rules); only the label differs, so this stays
+// a label override rather than a new ApproverRole.
 export function getApproverRoleLabel(role: string, ministryType: MinistryTypeValue): string {
   if (role === "MINISTRY_OVERSEER" && ministryType === "OCEANIA_REGIONAL") {
     return "Regional Director";
@@ -52,43 +49,42 @@ export function getTier(totalAmount: number): ApprovalTier {
   return 4;
 }
 
-// COS1/COS2 aren't fixed named slots (COS1 always Ross, COS2 always Joel)
-// -- they're claimable positions open to a shared, org-wide pool of
-// exactly three people. Whoever of the three acts first on a given
-// request's COS1 or COS2 row claims it (approval-data.ts's decideApproval
-// sets approverUserId at decision time, not before); each needed slot must
-// be claimed by a different person. A decline from whoever claims a slot
-// still rejects the whole request, same as every other role -- there's no
-// "try someone else" fallback. Corrected 2026-09-02 after an earlier,
-// wrong fixed-slot-per-person model.
-// Local/dev-testing-only identities (see src/app/api/dev/login/route.ts) --
-// only actually routed real approvals when NODE_ENV !== "production", so
-// the deployed app never treats DEV_TEST_APPROVER_EMAIL as a real pool
-// member even though it shares the same database as local dev.
-// approval-data.ts further scopes the dev approver identity to only ever
-// act on DEV_TEST_REQUESTER_EMAIL's own requests, never a real person's --
-// COS_POOL membership alone isn't request-scoped, so without that extra
-// check the dev approver could otherwise claim a real pending approval on
-// any tier-2+ request in the shared database.
+// COS1/COS2 aren't fixed named slots -- they're claimable positions open
+// to a shared pool of real people, configured via COS_POOL_EMAILS rather
+// than hardcoded here. Whoever claims a slot first owns it (decideApproval
+// sets approverUserId at decision time); a decline still rejects the
+// whole request, same as every other role.
+
+// Local/dev-testing-only identities -- only routed real approvals when
+// NODE_ENV !== "production", so production never treats
+// DEV_TEST_APPROVER_EMAIL as a real pool member even though it shares the
+// same database as local dev. approval-data.ts further scopes the dev
+// approver to only act on DEV_TEST_REQUESTER_EMAIL's own requests, since
+// COS_POOL membership alone isn't request-scoped.
 export const DEV_TEST_APPROVER_EMAIL = "dev-approver@test.local";
 export const DEV_TEST_REQUESTER_EMAIL = "dev-requester@test.local";
 
-export const COS_POOL = [
-  "rosscallado@gmail.com",
-  "joel.jmj@gmail.com",
-  "vamiebpinlac@gmail.com",
-  ...(process.env.NODE_ENV === "production" ? [] : [DEV_TEST_APPROVER_EMAIL]),
-] as const;
+// COS_POOL_EMAILS: comma-separated real approver emails (see .env.example).
+const configuredCosPoolEmails = (process.env.COS_POOL_EMAILS ?? "")
+  .split(",")
+  .map((email) => email.trim())
+  .filter(Boolean);
 
-// Tier 4's Regional Director requirement can be satisfied two ways: his
-// own direct approval, or the same COS1+COS2 baseline (already required)
-// plus this specific person -- Ross Callado, by name, not "whichever pool
-// member" -- explicitly confirming the request is within budget. See
-// approval-data.ts's confirmRegionalDirectorOverride/isFullyApproved.
-// When to actually invoke this (the decision-maker's guidance: only once
-// Regional Director's been sitting on it a week or more) is Ross's own
-// judgment call, not something the system tracks or enforces.
-export const REGIONAL_DIRECTOR_OVERRIDE_CONFIRMER_EMAIL = "rosscallado@gmail.com";
+export const COS_POOL = [
+  ...configuredCosPoolEmails,
+  ...(process.env.NODE_ENV === "production" ? [] : [DEV_TEST_APPROVER_EMAIL]),
+];
+
+// Tier 4's Regional Director requirement can be satisfied two ways: a
+// direct approval, or the COS1+COS2 baseline plus one specific,
+// designated person (configured via
+// REGIONAL_DIRECTOR_OVERRIDE_CONFIRMER_EMAIL) explicitly confirming the
+// request is within budget (see approval-data.ts's
+// confirmRegionalDirectorOverride). When to invoke this -- per the
+// decision-maker, only once Regional Director's been pending a week or
+// more -- is that person's own judgment call, not system-enforced.
+export const REGIONAL_DIRECTOR_OVERRIDE_CONFIRMER_EMAIL =
+  process.env.REGIONAL_DIRECTOR_OVERRIDE_CONFIRMER_EMAIL ?? "";
 
 // Ministry Overseer only applies to tiers 1-2; tier 3/4 requests skip
 // straight to COS-level approval. 1 COS for tier 2, 2 for tier 3 and 4

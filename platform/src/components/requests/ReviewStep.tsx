@@ -12,14 +12,10 @@ function maskAccountNumber(accountNumber: string): string {
   return "•".repeat(Math.max(accountNumber.length - 4, 0)) + " " + last4;
 }
 
-// A confidence-building summary rather than a re-display of every detail
-// already confirmed in the earlier steps -- counts for expenses/receipts
-// and a masked account number, not the full line-item/receipt lists again.
-// The wizard's own line-item and receipt managers (steps 2-3) are where
-// something wrong actually gets fixed; this step's job is just "does this
-// look right" right before an irreversible submission. Kept in its own
-// file for the same reason as WizardSteps.tsx -- storied in Storybook
-// without pulling in RequestDrawer.tsx's Server Action imports.
+// A confidence-building summary, not a re-display of every detail already
+// confirmed in earlier steps -- counts for expenses/receipts and a masked
+// account number. Kept in its own file, like WizardSteps.tsx, so Storybook
+// can story it without pulling in RequestDrawer.tsx's Server Action imports.
 export function ReviewStep({ data }: { data: DraftRequestView }) {
   const tier = getTier(Number(data.totalAmount.replace(/,/g, "")));
   const approverCount = getRequiredApproverRoles(tier).length;

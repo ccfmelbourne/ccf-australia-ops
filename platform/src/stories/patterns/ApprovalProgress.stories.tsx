@@ -3,41 +3,40 @@ import { MoneyStat } from "@/components/MoneyStat";
 import { ApprovalTimeline } from "@/components/requests/RequestProgressDrawer";
 import type { RequestProgressApprovalView } from "@/lib/request-data";
 
-// The fuller assembled view a requester actually sees in
-// RequestProgressDrawer.tsx -- total, an optional celebration panel, then
-// the timeline -- rather than the timeline alone (see
-// Components/ApprovalTimeline for that in isolation).
+// The fuller assembled view a requester sees in RequestProgressDrawer.tsx
+// -- total, an optional celebration panel, then the timeline -- rather
+// than the timeline alone (see Components/ApprovalTimeline).
 //
 // This is also where the "general user" vs. "requester holds the
-// required approval role" contrast actually becomes visible -- the
-// wizard's own steps (Patterns/ReimbursementForm) look identical either
-// way; only the resulting timeline differs, since a tier the requester
-// themselves is the designated approver for shows AUTO_SATISFIED instead
-// of a normal pending/decided step.
+// required approval role" contrast becomes visible -- the wizard steps
+// (Patterns/ReimbursementForm) look identical either way; only the
+// resulting timeline differs, since a tier the requester is the
+// designated approver for shows AUTO_SATISFIED instead.
 type Variant = "generalUserInProgress" | "generalUserApproved" | "selfSubmittedByOverseer";
 
 function ApprovalProgressPattern({ variant }: { variant: Variant }) {
   const approvals: RequestProgressApprovalView[] =
     variant === "generalUserApproved"
       ? [
-          { role: "COS1", approverName: "Ross Callado", status: "APPROVED", decidedAt: "2026-08-28T02:00:00.000Z", comments: null },
-          { role: "COS2", approverName: "Joel Jerez", status: "APPROVED", decidedAt: "2026-08-29T04:30:00.000Z", comments: null },
-          { role: "FINANCE_OVERSEER", approverName: "Vamie Pinlac", status: "APPROVED", decidedAt: "2026-08-30T01:00:00.000Z", comments: null },
+          { role: "COS1", approverName: "Alex Approver", status: "APPROVED", decidedAt: "2026-08-28T02:00:00.000Z", comments: null },
+          { role: "COS2", approverName: "Jordan Reyes", status: "APPROVED", decidedAt: "2026-08-29T04:30:00.000Z", comments: null },
+          { role: "FINANCE_OVERSEER", approverName: "Morgan Cruz", status: "APPROVED", decidedAt: "2026-08-30T01:00:00.000Z", comments: null },
         ]
       : variant === "generalUserInProgress"
         ? [
-            { role: "COS1", approverName: "Ross Callado", status: "APPROVED", decidedAt: "2026-08-28T02:00:00.000Z", comments: null },
+            { role: "COS1", approverName: "Alex Approver", status: "APPROVED", decidedAt: "2026-08-28T02:00:00.000Z", comments: null },
             { role: "COS2", approverName: null, status: "PENDING", decidedAt: null, comments: null },
             { role: "FINANCE_OVERSEER", approverName: null, status: "PENDING", decidedAt: null, comments: null },
           ]
         : [
-            // Dexter submitted his own Comms & Media request -- Ministry
-            // Overseer is auto-satisfied instead of asking him to approve
-            // his own reimbursement; COS1 still requires a genuinely
-            // independent decision, same as anyone else's tier-2 request.
+            // The requester submitted their own Comms & Media request --
+            // Ministry Overseer is auto-satisfied instead of asking them
+            // to approve their own reimbursement; COS1 still requires a
+            // genuinely independent decision, same as anyone else's
+            // tier-2 request.
             {
               role: "MINISTRY_OVERSEER",
-              approverName: "Dexter Santiago",
+              approverName: "Taylor Santos",
               status: "AUTO_SATISFIED",
               decidedAt: "2026-08-28T02:00:00.000Z",
               comments: "Auto-satisfied: requester is the designated Ministry Overseer for this request.",

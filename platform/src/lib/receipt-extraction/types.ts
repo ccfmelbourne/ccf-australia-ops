@@ -1,17 +1,12 @@
-// Provider-agnostic OCR/extraction boundary. Swapping providers (Google
-// Vision -> AWS Textract, or a later AI-based structured extractor) means
-// adding one new file implementing this interface and changing the export
-// in index.ts -- nothing else in the app changes.
+// Provider-agnostic OCR/extraction boundary -- swapping providers means
+// adding one new file implementing this interface and changing the
+// export in index.ts, nothing else.
 //
-// extract() itself never writes anything -- it only reads a receipt and
-// returns what it found. What the caller does with the result is a
-// separate decision: as of 2026-09-02, uploadReceiptAction
-// (app/requests/actions.ts) writes a real LineItem automatically whenever
-// a result has both a merchant and a valid amount, with no human
-// confirmation step -- a deliberate, explicitly confirmed reversal of this
-// module's original "OCR never writes without confirmation" rule. A
-// result missing either field is never partially acted on; the requester
-// adds that line item manually instead.
+// extract() itself never writes anything, only reads and reports.
+// uploadReceiptAction writes a real LineItem automatically when a result
+// has both a merchant and a valid amount (a deliberate reversal of this
+// module's original "OCR never writes without confirmation" rule); a
+// result missing either field is never partially acted on.
 
 export interface ReceiptInput {
   buffer: Buffer;

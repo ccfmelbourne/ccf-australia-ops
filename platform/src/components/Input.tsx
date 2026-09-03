@@ -4,11 +4,9 @@ export interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
   error?: boolean;
 }
 
-// Matches the text input styling already used everywhere in the app
-// (BankDetailsManager, LineItemManager's add-item form). Existing call
-// sites still inline these classes directly -- adopting this component
-// there is a separate migration -- but this is the canonical version
-// Storybook documents, and new inputs should use it.
+// Matches the text input styling already used app-wide. Existing call
+// sites still inline these classes directly (a separate migration), but
+// new inputs should use this.
 export function Input({ error, className, ...props }: InputProps) {
   return (
     <input

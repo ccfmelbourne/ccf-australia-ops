@@ -8,11 +8,10 @@ import { NotificationBell } from "./NotificationBell";
 import { UserMenu } from "./UserMenu";
 import type { UserProfileView } from "@/lib/user-session";
 
-// Replaces the old AppHeader-only shell -- a persistent sidebar on wide
-// viewports, collapsing to a hamburger + MobileNav drawer below lg. The
-// layout (a Server Component) fetches user/pendingApprovalCount and
-// passes them down as plain data props; the interactivity (mobile nav
-// open/close, the user menu) lives here and in its children instead.
+// A persistent sidebar on wide viewports, collapsing to a hamburger +
+// MobileNav drawer below lg. The layout (a Server Component) fetches
+// user/pendingApprovalCount as plain data props; the interactivity
+// (mobile nav open/close, the user menu) lives here and in its children.
 export function AppShell({
   user,
   pendingApprovalCount,

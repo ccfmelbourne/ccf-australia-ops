@@ -34,6 +34,10 @@ yarn-error.log*
 .env*
 !.env.example
 
+# Real approver names/emails for prisma/seed.ts -- never commit real people's
+# identities; see prisma/seed-data.example.json for the template.
+/prisma/seed-data.json
+
 # vercel
 .vercel
 

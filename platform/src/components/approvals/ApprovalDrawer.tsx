@@ -32,12 +32,9 @@ export function ApprovalDrawer({
   const [comment, setComment] = useState("");
   const [isPending, startTransition] = useTransition();
   // Inline error state, not a toast -- this component IS a native
-  // <dialog>, which the browser promotes to the "top layer" the instant
-  // it's opened via showModal(). Anything in the top layer renders above
-  // *all* regular-positioned content regardless of z-index, so a toast
-  // fired while the dialog is open would render behind it -- invisible to
-  // the user. Inline text inside the dialog's own DOM doesn't have this
-  // problem.
+  // <dialog>, which the browser promotes to the "top layer" once opened
+  // via showModal(). A toast fired while the dialog is open would render
+  // behind it, invisible to the user.
   const [error, setError] = useState<string | null>(null);
 
   function handleDecide(decision: "APPROVED" | "REJECTED") {

@@ -13,41 +13,22 @@ import type { ApprovedRequestDetail, ApproverDirectory } from "@/lib/request-dat
 const logoBuffer = readFileSync(join(process.cwd(), "public", "ccfmelbourne-logo.png"));
 
 // The official Finance-facing document for an approved request -- once
-// Finance no longer logs into the app, this PDF (not the email body, not a
-// link) is the artifact Finance actually acts on to process payment. Layout
-// deliberately mirrors CCF Australia's actual paper voucher (shared by the
-// decision-maker as CCOMMS-Reibursement_June292026_signed.pdf), not just the
-// Track A pilot's simplified HTML version: org header, request-type
-// checkboxes, a line-items table alongside a ministry checklist, a
-// requisitioned-by/bank-details row, per-role signature columns, the
-// Approval Limit tier legend, and a live Ministry->Overseer directory.
-// Deliberately dropped from the real form: the WEST/NORTH region checkboxes
-// (no region concept exists anywhere in this app's data model -- adding one
-// would be a real new feature, not a formatting change). The "If paid in
-// cash" section IS included (added back 2026-09-02, per the decision-maker
-// comparing against the real form) even though this app only ever captures
-// bank transfer details -- it's printed as blank lines for Finance to fill
-// in by hand for the rare case they actually pay in cash, not backed by any
-// app data.
-// @react-pdf/renderer has no real HTML <table> or checkbox input -- rows and
-// checkboxes below are plain flexbox Views styled to look like them.
+// Finance no longer logs into the app, this PDF (not the email body, not
+// a link) is what Finance actually acts on. Layout mirrors CCF
+// Australia's real paper voucher; the WEST/NORTH region checkboxes are
+// deliberately dropped (no region concept in this app's data model), and
+// "If paid in cash" is included as blank lines for Finance to fill in by
+// hand, despite this app only ever capturing bank transfer details.
+// @react-pdf/renderer has no real HTML <table>/checkbox -- rows and
+// checkboxes below are flexbox Views styled to look like them.
 //
-// Receipts are embedded INTO this same PDF, not just left as separate email
-// attachments -- Finance's official document should be openable on its own
-// and show everything. @react-pdf/renderer can only render its own JSX tree
-// (it has no way to ingest an existing PDF's pages), so the two receipt
-// formats are handled differently: JPEG/PNG receipts become extra <Page>s
-// rendered by react-pdf itself (via its Buffer-accepting Image source,
-// confirmed against @react-pdf/types/image.d.ts's SourceDataBuffer type);
-// PDF-format receipts have their actual pages copied in afterwards with
-// pdf-lib, since that's real page-merging, not something react-pdf does.
-// HEIC receipts can't be embedded by either (no HEIC decoder here, same
-// limitation the Vision OCR feature already accepts) -- they're listed by
-// name on the voucher page as a pointer to the separate raw attachment,
-// which the caller (notifications.ts) still includes either way. Approver
-// signatures are small PNGs captured client-side (ApprovalDrawer.tsx's
-// signature pad) -- always PNG, so they go through the same Buffer-accepting
-// Image source, no format detection needed like receipts.
+// Receipts are embedded INTO this same PDF, not left as separate email
+// attachments. @react-pdf/renderer can't ingest an existing PDF's pages,
+// so JPEG/PNG receipts become extra react-pdf <Page>s while PDF-format
+// receipts get their pages copied in afterwards with pdf-lib; HEIC
+// receipts (no decoder here) are listed by name as a pointer to the
+// separate raw attachment. Approver signatures are always PNG, so they
+// need no format detection like receipts do.
 
 export interface ReceiptImageInput {
   filename: string;
@@ -174,11 +155,8 @@ function formatDecidedAt(iso: string | null): string {
 }
 
 // Shrinks line-item rows as the list grows, raising how many fit on page 1
-// before A4's ~258pt item budget (see the module comment's page-height
-// analysis) forces an overflow to page 2 -- roughly 14 rows at the default
-// size, up to roughly 25 at the smallest tier, rather than a fixed row
-// height that always overflows past ~14 items regardless of how short each
-// description is.
+// before A4's item budget forces an overflow to page 2 -- roughly 14 rows
+// at the default size, up to roughly 25 at the smallest tier.
 function lineItemDensity(count: number): { fontSize: number; paddingVertical: number } {
   if (count <= 14) return { fontSize: 9, paddingVertical: 4 };
   if (count <= 20) return { fontSize: 8, paddingVertical: 3 };
@@ -298,21 +276,20 @@ export function VoucherDocument({
             {detail.approvals.map((a, i) => {
               const signature = signaturesByRole.get(a.role);
               // A tier-4 voucher can reach APPROVED without a direct
-              // Regional Director decision -- Ross Callado's "within
-              // budget" confirmation (regionalDirectorOverrideConfirmedAt)
-              // is an alternative to it, so his row can stay genuinely
+              // Regional Director decision -- the "within budget" override
+              // confirmation (regionalDirectorOverrideConfirmedAt) is an
+              // alternative to it, so this row can stay genuinely
               // PENDING/unsigned forever. That's correct data, not a bug --
-              // represent it accurately here rather than showing a
+              // represent it accurately rather than showing a
               // misleadingly-blank column on an otherwise fully approved
               // voucher.
               const waivedRegionalDirector =
                 a.role === "REGIONAL_DIRECTOR" && a.status === "PENDING";
               // A requester who's also the designated approver for a tier
               // has it auto-satisfied at submit time rather than clicking
-              // "Approve" on their own reimbursement (request-data.ts's
-              // submitRequest) -- still has a real decidedAt/approverName
-              // (unlike the waived-Regional-Director case below, which
-              // stays genuinely undecided), just no signature.
+              // "Approve" on their own reimbursement -- still has a real
+              // decidedAt/approverName (unlike the waived-Regional-Director
+              // case above, which stays undecided), just no signature.
               const autoSatisfied = a.status === "AUTO_SATISFIED";
               return (
                 <View style={styles.approvalCol} key={i}>
@@ -326,7 +303,7 @@ export function VoucherDocument({
                         ? "Auto-satisfied"
                         : waivedRegionalDirector
                           ? detail.regionalDirectorOverrideConfirmedAt
-                            ? `Waived — Ross Callado confirmed within budget on ${formatDecidedAt(detail.regionalDirectorOverrideConfirmedAt)}`
+                            ? `Waived — confirmed within budget on ${formatDecidedAt(detail.regionalDirectorOverrideConfirmedAt)}`
                             : "Waived"
                           : "No signature on file"}
                     </Text>
@@ -335,12 +312,10 @@ export function VoucherDocument({
                   <Text style={styles.approvalDate}>
                     {waivedRegionalDirector ? "" : formatDecidedAt(a.decidedAt)}
                   </Text>
-                  {/* Signature present but auto-satisfied (see the
-                      requesterSignature reuse in notifications.ts) still
-                      needs to read differently from a normal, independent
-                      approval -- it's the requester's own signature, not a
-                      separate approver's, so the voucher says so rather
-                      than looking indistinguishable from a real approval. */}
+                  {/* A signature present but auto-satisfied is the
+                      requester's own, not a separate approver's, so the
+                      voucher says so rather than looking like a real
+                      independent approval. */}
                   {autoSatisfied && signature && (
                     <Text style={styles.approvalDate}>(auto-satisfied)</Text>
                   )}
@@ -405,13 +380,11 @@ export function VoucherDocument({
   );
 }
 
-// Live "who approves what" reference (request-data.ts's getApproverDirectory
-// re-queries ApproverAssignment fresh every time this is generated) --
-// deliberately distinct from the Approval section above, which is a
-// historical record of who actually signed *this* voucher. Grouped by
-// overseer (several ministries commonly share one) into compact cards,
-// matching the real form's compact grouped-column layout rather than a tall
-// one-row-per-ministry table.
+// Live "who approves what" reference (getApproverDirectory re-queries
+// fresh each time), distinct from the Approval section above, which is a
+// historical record of who signed this voucher. Grouped by overseer
+// (several ministries commonly share one) into compact cards, matching
+// the real form's layout rather than a tall one-row-per-ministry table.
 function groupMinistriesByOverseer(
   directory: ApproverDirectory,
 ): { ministryLabels: string[]; overseerName: string }[] {

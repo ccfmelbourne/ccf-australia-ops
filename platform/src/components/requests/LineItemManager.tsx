@@ -18,14 +18,11 @@ export function LineItemManager({
   requestId: string;
   lineItems: DraftLineItemView[];
   totalAmount: string;
-  // Reports this component's own isPending upward -- a remove (or an
-  // add) is a server round-trip followed by router.refresh(), and until
-  // that resolves, the `lineItems` prop is still the pre-mutation value.
-  // A wizard step's own Continue button gates on lineItems.length alone,
-  // so without this, removing the only line item and clicking Continue
-  // in that window advanced to the next step with zero items -- found
-  // live. The caller factors this into its own gating instead of this
-  // component trying to disable buttons outside itself.
+  // Reports this component's own isPending upward -- a remove (or add) is
+  // a server round-trip followed by router.refresh(), so until that
+  // resolves the `lineItems` prop is stale. Without this, removing the
+  // only line item and clicking Continue in that window advanced past the
+  // step with zero items (found live).
   onPendingChange?: (pending: boolean) => void;
 }) {
   const router = useRouter();
@@ -38,11 +35,9 @@ export function LineItemManager({
   const [description, setDescription] = useState("");
   const [amount, setAmount] = useState("");
   // Correcting an auto-scanned "<merchant> | <item>" description OCR got
-  // wrong -- common enough (real receipt/invoice layouts vary a lot) that
-  // remove-and-re-add alone wasn't a good enough fix. Only one row edits
-  // at a time; its own error stays scoped to editError rather than the
-  // shared banner below, since a failed save shouldn't look like it came
-  // from the "Add a line item" form.
+  // wrong. Only one row edits at a time; its error stays scoped to
+  // editError rather than the shared banner below, since a failed save
+  // shouldn't look like it came from the "Add a line item" form.
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editDescription, setEditDescription] = useState("");
   const [editAmount, setEditAmount] = useState("");
