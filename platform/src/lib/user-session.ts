@@ -1,5 +1,6 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { cookies } from "next/headers";
+import { prisma } from "@/lib/prisma";
 
 // HMAC-signed cookie carrying an arbitrary userId (requesters/approvers
 // sign in via Google -- see google-oauth.ts).
@@ -58,4 +59,21 @@ export async function destroyUserSession(): Promise<void> {
 export async function getCurrentUserId(): Promise<string | null> {
   const cookieStore = await cookies();
   return parseCookieValue(cookieStore.get(COOKIE_NAME)?.value);
+}
+
+export interface UserProfileView {
+  name: string;
+  picture: string | null;
+}
+
+// Deliberately here, not in request-data.ts/approval-data.ts -- a user's
+// own display info (greeting, avatar) isn't Reimbursement or Approval
+// business logic, it's the same "who is this session" concern the rest
+// of this file already owns, just resolved past the cookie into the
+// actual User row.
+export async function getUserProfile(userId: string): Promise<UserProfileView | null> {
+  return prisma.user.findUnique({
+    where: { id: userId },
+    select: { name: true, picture: true },
+  });
 }
