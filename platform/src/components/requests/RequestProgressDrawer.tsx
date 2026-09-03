@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useRef } from "react";
 import { REQUEST_TYPE_LABELS, MINISTRY_TYPE_LABELS } from "@/lib/request-types";
 import { getApproverRoleLabel } from "@/lib/approval-routing";
+import { Dialog } from "@/components/Dialog";
 import { RequestStatusBadge } from "@/components/RequestStatusBadge";
 import { MoneyStat } from "@/components/MoneyStat";
 import { SectionHeading } from "@/components/SectionHeading";
@@ -121,8 +122,8 @@ export function ApprovalTimeline({
 // The requester's own read-only view of a submitted (non-editable)
 // request -- there was previously no UI at all for this; RequestsTable
 // only ever showed Edit/Delete for editable statuses, so a submitted
-// request was otherwise invisible until it resolved. Same native <dialog>
-// pattern as RequestDrawer/ApprovalDrawer.
+// request was otherwise invisible until it resolved. Same Dialog
+// side-panel shell RequestDrawer/ApprovalDrawer use.
 export function RequestProgressDrawer({
   data,
   onClose,
@@ -130,47 +131,11 @@ export function RequestProgressDrawer({
   data: RequestProgressView;
   onClose: () => void;
 }) {
-  const dialogRef = useRef<HTMLDialogElement>(null);
-
-  useEffect(() => {
-    const dialog = dialogRef.current;
-    if (dialog && !dialog.open) dialog.showModal();
-  }, []);
-
-  function handleClose() {
-    dialogRef.current?.close();
-  }
+  const closeRef = useRef<(() => void) | null>(null);
 
   return (
-    <dialog
-      ref={dialogRef}
-      onClose={onClose}
-      // Deliberately no backdrop-click-to-close, matching RequestDrawer's
-      // own decision -- the X (and the bottom Close button below the
-      // approval timeline, for when this scrolls) stay as the only ways
-      // to dismiss it.
-      closedby="none"
-      aria-labelledby="progress-drawer-title"
-      // Opens from the left edge -- see RequestDrawer.tsx's own dialog for
-      // why rounded-r-lg, not rounded-l-lg.
-      className="drawer-panel fixed inset-y-0 left-0 m-0 h-dvh w-full max-w-xl overflow-y-auto rounded-r-lg bg-white p-6 shadow-xl backdrop:bg-black/40"
-    >
-      <div className="flex items-center justify-between border-b border-slate-200 pb-4">
-        <h2 id="progress-drawer-title" className="text-lg font-bold text-slate-900">
-          {data.voucherNo}
-        </h2>
-        <button
-          type="button"
-          onClick={handleClose}
-          aria-label="Close"
-          className="-m-2 p-2 text-2xl leading-none text-slate-500 hover:text-slate-700"
-        >
-          &times;
-        </button>
-      </div>
-
-      <div className="flex flex-col gap-6 pt-4">
-        {data.status === "APPROVED" && (
+    <Dialog titleId="progress-drawer-title" title={data.voucherNo} onClose={onClose} closeRef={closeRef}>
+      {data.status === "APPROVED" && (
           <div className="flex flex-col items-center gap-1 rounded-lg border border-teal-200 bg-teal-50 p-6 text-center">
             <span
               aria-hidden
@@ -182,97 +147,96 @@ export function RequestProgressDrawer({
             <p className="max-w-xs text-sm text-slate-600">
               All required approvals are complete. Finance will now process your request.
             </p>
-            <p className="mt-1 font-mono text-xs text-slate-500">Voucher #{data.voucherNo}</p>
+          <p className="mt-1 font-mono text-xs text-slate-500">Voucher #{data.voucherNo}</p>
+        </div>
+      )}
+
+      <MoneyStat label="Total reimbursement" amount={data.totalAmount} />
+
+      <div className="flex flex-col divide-y divide-slate-200">
+        <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-2 pb-6 text-sm">
+          <dt className="text-slate-500">Status</dt>
+          <dd>
+            <RequestStatusBadge status={data.status} />
+          </dd>
+          <dt className="text-slate-500">Type</dt>
+          <dd>{REQUEST_TYPE_LABELS[data.requestType]}</dd>
+          <dt className="text-slate-500">Ministry</dt>
+          <dd>{MINISTRY_TYPE_LABELS[data.ministryType]}</dd>
+        </dl>
+
+        <div className="py-6">
+          <SectionHeading>Items</SectionHeading>
+          {data.lineItems.length === 0 ? (
+            <p className="text-sm text-slate-500">None.</p>
+          ) : (
+            <ul className="text-sm">
+              {data.lineItems.map((li, i) => (
+                <li key={i} className="flex justify-between border-b border-slate-100 py-1">
+                  <span>{li.description}</span>
+                  <span className="font-mono">${li.amount}</span>
+                </li>
+              ))}
+              <li className="flex justify-between border-t-2 border-slate-300 py-1.5 font-semibold">
+                <span>Total</span>
+                <span className="font-mono">${data.totalAmount}</span>
+              </li>
+            </ul>
+          )}
+        </div>
+
+        <div className="py-6">
+          <SectionHeading>Receipts</SectionHeading>
+          {data.receipts.length === 0 ? (
+            <p className="text-sm text-slate-500">None attached.</p>
+          ) : (
+            <ul className="flex flex-col gap-1">
+              {data.receipts.map((r, i) => (
+                <li
+                  key={i}
+                  className="flex items-center justify-between rounded-md border border-slate-200 px-3 py-2 text-sm"
+                >
+                  <span className="truncate font-mono text-slate-700">{r.filename}</span>
+                  <a
+                    href={r.viewUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="-m-1 shrink-0 p-1 text-teal-700 hover:underline"
+                  >
+                    View
+                  </a>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+
+        {data.bankDetails && (
+          <div className="py-6">
+            <SectionHeading>Bank details</SectionHeading>
+            <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-sm">
+              <dt className="text-slate-500">Account name</dt>
+              <dd>{data.bankDetails.accountName}</dd>
+              <dt className="text-slate-500">BSB</dt>
+              <dd>{data.bankDetails.bsb}</dd>
+              <dt className="text-slate-500">Account number</dt>
+              <dd>{data.bankDetails.accountNumber}</dd>
+            </dl>
           </div>
         )}
 
-        <MoneyStat label="Total reimbursement" amount={data.totalAmount} />
-
-        <div className="flex flex-col divide-y divide-slate-200">
-          <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-2 pb-6 text-sm">
-            <dt className="text-slate-500">Status</dt>
-            <dd>
-              <RequestStatusBadge status={data.status} />
-            </dd>
-            <dt className="text-slate-500">Type</dt>
-            <dd>{REQUEST_TYPE_LABELS[data.requestType]}</dd>
-            <dt className="text-slate-500">Ministry</dt>
-            <dd>{MINISTRY_TYPE_LABELS[data.ministryType]}</dd>
-          </dl>
-
-          <div className="py-6">
-            <SectionHeading>Items</SectionHeading>
-            {data.lineItems.length === 0 ? (
-              <p className="text-sm text-slate-500">None.</p>
-            ) : (
-              <ul className="text-sm">
-                {data.lineItems.map((li, i) => (
-                  <li key={i} className="flex justify-between border-b border-slate-100 py-1">
-                    <span>{li.description}</span>
-                    <span className="font-mono">${li.amount}</span>
-                  </li>
-                ))}
-                <li className="flex justify-between border-t-2 border-slate-300 py-1.5 font-semibold">
-                  <span>Total</span>
-                  <span className="font-mono">${data.totalAmount}</span>
-                </li>
-              </ul>
-            )}
-          </div>
-
-          <div className="py-6">
-            <SectionHeading>Receipts</SectionHeading>
-            {data.receipts.length === 0 ? (
-              <p className="text-sm text-slate-500">None attached.</p>
-            ) : (
-              <ul className="flex flex-col gap-1">
-                {data.receipts.map((r, i) => (
-                  <li
-                    key={i}
-                    className="flex items-center justify-between rounded-md border border-slate-200 px-3 py-2 text-sm"
-                  >
-                    <span className="truncate font-mono text-slate-700">{r.filename}</span>
-                    <a
-                      href={r.viewUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="-m-1 shrink-0 p-1 text-teal-700 hover:underline"
-                    >
-                      View
-                    </a>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-
-          {data.bankDetails && (
-            <div className="py-6">
-              <SectionHeading>Bank details</SectionHeading>
-              <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-sm">
-                <dt className="text-slate-500">Account name</dt>
-                <dd>{data.bankDetails.accountName}</dd>
-                <dt className="text-slate-500">BSB</dt>
-                <dd>{data.bankDetails.bsb}</dd>
-                <dt className="text-slate-500">Account number</dt>
-                <dd>{data.bankDetails.accountNumber}</dd>
-              </dl>
-            </div>
-          )}
-
-          <div className="pt-6">
-            <ApprovalTimeline
-              approvals={data.approvals}
-              ministryType={data.ministryType}
-              regionalDirectorOverrideConfirmedAt={data.regionalDirectorOverrideConfirmedAt}
-            />
-          </div>
-        </div>
-
-        <div className="flex justify-end border-t border-slate-200 pt-4">
-          <CloseButton onClose={handleClose} />
+        <div className="pt-6">
+          <ApprovalTimeline
+            approvals={data.approvals}
+            ministryType={data.ministryType}
+            regionalDirectorOverrideConfirmedAt={data.regionalDirectorOverrideConfirmedAt}
+          />
         </div>
       </div>
-    </dialog>
+
+      <div className="flex justify-end border-t border-slate-200 pt-4">
+        <CloseButton onClose={() => closeRef.current?.()} />
+      </div>
+    </Dialog>
   );
 }
