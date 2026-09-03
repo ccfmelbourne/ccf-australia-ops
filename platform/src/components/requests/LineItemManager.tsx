@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { addLineItemAction, removeLineItemAction, updateLineItemAction } from "@/app/requests/actions";
 import { Button } from "@/components/Button";
@@ -13,13 +13,27 @@ export function LineItemManager({
   requestId,
   lineItems,
   totalAmount,
+  onPendingChange,
 }: {
   requestId: string;
   lineItems: DraftLineItemView[];
   totalAmount: string;
+  // Reports this component's own isPending upward -- a remove (or an
+  // add) is a server round-trip followed by router.refresh(), and until
+  // that resolves, the `lineItems` prop is still the pre-mutation value.
+  // A wizard step's own Continue button gates on lineItems.length alone,
+  // so without this, removing the only line item and clicking Continue
+  // in that window advanced to the next step with zero items -- found
+  // live. The caller factors this into its own gating instead of this
+  // component trying to disable buttons outside itself.
+  onPendingChange?: (pending: boolean) => void;
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
+
+  useEffect(() => {
+    onPendingChange?.(isPending);
+  }, [isPending, onPendingChange]);
   const [error, setError] = useState<string | null>(null);
   const [description, setDescription] = useState("");
   const [amount, setAmount] = useState("");

@@ -21,6 +21,7 @@ import { ReceiptManager } from "./ReceiptManager";
 import { BankDetailsManager } from "./BankDetailsManager";
 import { CloseButton } from "./CloseButton";
 import { Button } from "@/components/Button";
+import { Dialog } from "@/components/Dialog";
 import { ErrorBanner } from "@/components/ErrorBanner";
 import { RequestStatusBadge } from "@/components/RequestStatusBadge";
 import { WizardSteps } from "./WizardSteps";
@@ -58,38 +59,33 @@ const SORTED_MINISTRY_TYPES = [...MINISTRY_TYPES].sort((a, b) =>
   MINISTRY_TYPE_LABELS[a].localeCompare(MINISTRY_TYPE_LABELS[b]),
 );
 
-// A native <dialog> styled as a left-side panel on wide viewports and a
-// full-screen sheet on small ones -- w-full capped by max-w-xl gives that
-// responsiveness for free (below ~36rem viewport width it's already full
-// width, no separate breakpoint needed). <dialog> gives focus-trapping,
-// Escape-to-close, and a backdrop natively, so no new UI dependency.
 type RequestDrawerProps =
   | { mode: "create"; onCreated: (data: DraftRequestView) => void; onClose: () => void }
   | { mode: "edit"; data: DraftRequestView; showWizard: boolean; onClose: () => void };
 
 export function RequestDrawer(props: RequestDrawerProps) {
-  const dialogRef = useRef<HTMLDialogElement>(null);
+  const closeRef = useRef<(() => void) | null>(null);
   // Identifies which logical session (creating vs. editing a specific
-  // request) this render represents. RequestsTable.tsx deliberately keeps
-  // the same <RequestDrawer> instance across the create -> edit handoff
-  // (see its comment), and native dialog.close() closes the panel
-  // synchronously while the router navigation that clears `openRequest`
-  // resolves asynchronously -- so a fast close-then-open-a-different-
-  // request can also land as new props on this same instance, without a
-  // remount, rather than the close having actually completed first. An
-  // effect keyed on [] would only ever call showModal() once per mount and
-  // silently never reopen the dialog for that later session (found via a
-  // live report of the panel intermittently not opening) -- keying on
-  // sessionKey instead re-runs this effect whenever the session actually
-  // changes, regardless of whether the component instance was reused. The
-  // `!dialog.open` guard still makes this a no-op during the create -> edit
-  // handoff, where the dialog is already open and calling showModal() again
-  // would throw.
+  // request) this render represents, passed to Dialog as resetKey.
+  // RequestsTable.tsx deliberately keeps the same <RequestDrawer> instance
+  // across the create -> edit handoff (see its comment), and native
+  // dialog.close() closes the panel synchronously while the router
+  // navigation that clears `openRequest` resolves asynchronously -- so a
+  // fast close-then-open-a-different-request can also land as new props on
+  // this same instance, without a remount, rather than the close having
+  // actually completed first. Dialog's showModal effect keyed on [] alone
+  // would only ever run once per mount and silently never reopen it for
+  // that later session (found via a live report of the panel
+  // intermittently not opening) -- resetKey re-runs it whenever the
+  // session actually changes, regardless of whether the component
+  // instance was reused. Dialog's own `!dialog.open` guard still makes
+  // this a no-op during the create -> edit handoff, where the dialog is
+  // already open and calling showModal() again would throw.
   const sessionKey = props.mode === "edit" ? props.data.id : "create";
-  // Set inside handleDialogClose below, which the native "close" event
-  // fires for every genuine close path uniformly (the X button, the lower
-  // Close button, and Escape). Passed down to CreateStep so it can tell a
-  // real close-while-creating apart from React Strict Mode's dev-only
+  // Set inside handleDialogClose below, which Dialog's onClose fires for
+  // every genuine close path uniformly (the X button, the lower Close
+  // button, and Escape). Passed down to CreateStep so it can tell a real
+  // close-while-creating apart from React Strict Mode's dev-only
   // synthetic unmount/remount of every component on initial mount --
   // CreateStep previously inferred "closed" from its own cleanup effect,
   // which Strict Mode's double-invoke set permanently true on every
@@ -98,35 +94,23 @@ export function RequestDrawer(props: RequestDrawerProps) {
   // set only by an actual close event, isn't affected by that.
   const closedRef = useRef(false);
 
-  useEffect(() => {
-    const dialog = dialogRef.current;
-    if (dialog && !dialog.open) dialog.showModal();
-  }, [sessionKey]);
-
-  // dialog.close() synchronously fires the native "close" event, which the
-  // onClose prop below already handles -- no need to also call
-  // props.onClose() here (that would fire it twice).
-  function handleClose() {
-    dialogRef.current?.close();
-  }
-
-  // Every close path (the X button, Escape, a backdrop click, and
-  // CreateWizard's own post-submit close) funnels through this one native
-  // "close" event -- the single place to catch "closed a fresh draft that
-  // never got a single line item" and clean it up instead of leaving an
-  // empty row cluttering the requester's own request list (this exact
-  // clutter was found and manually cleaned up earlier in this project's
-  // history). Scoped to data.returnReason === null (a never-submitted
-  // draft -- independent of whether it was shown via the wizard or the
-  // flat view, since clicking Edit on an unsubmitted draft now shows flat
-  // too) -- a returned request has real submission history and is never
-  // deleted just because its line items were edited down to zero before
-  // closing. The native dialog itself has already closed by the time this
-  // fires (that part is instant, browser-native), but props.onClose() is
-  // awaited until the delete finishes -- it's what tells RequestsTable to
-  // drop the `open` query param and re-fetch the table. Calling it before
-  // the delete lands used to show the still-there draft row for a moment,
-  // then remove it visibly a beat later once a second refresh caught up --
+  // Every close path (the X button, Escape, and CreateWizard's own
+  // post-submit close) funnels through this one Dialog onClose -- the
+  // single place to catch "closed a fresh draft that never got a single
+  // line item" and clean it up instead of leaving an empty row cluttering
+  // the requester's own request list (this exact clutter was found and
+  // manually cleaned up earlier in this project's history). Scoped to
+  // data.returnReason === null (a never-submitted draft -- independent of
+  // whether it was shown via the wizard or the flat view, since clicking
+  // Edit on an unsubmitted draft now shows flat too) -- a returned request
+  // has real submission history and is never deleted just because its
+  // line items were edited down to zero before closing. The native dialog
+  // itself has already closed by the time this fires (that part is
+  // instant, browser-native), but props.onClose() is awaited until the
+  // delete finishes -- it's what tells RequestsTable to drop the `open`
+  // query param and re-fetch the table. Calling it before the delete
+  // lands used to show the still-there draft row for a moment, then
+  // remove it visibly a beat later once a second refresh caught up --
   // found via the decision-maker actually watching it happen. Awaiting
   // first means the table's one and only re-fetch already reflects the
   // row being gone.
@@ -139,79 +123,51 @@ export function RequestDrawer(props: RequestDrawerProps) {
   }
 
   return (
-    <dialog
-      ref={dialogRef}
+    <Dialog
+      titleId="drawer-title"
+      title={props.mode === "create" ? "New request" : props.data.voucherNo}
+      // DraftRequestView doesn't carry a status field directly --
+      // getDraftRequest only ever returns DRAFT/NEEDS_CLARIFICATION/
+      // REJECTED_RETURNED, and returnReason already distinguishes which,
+      // the same way EditContent's own banner below does.
+      badge={
+        props.mode === "edit" ? (
+          <RequestStatusBadge
+            status={
+              props.data.returnReason === null
+                ? "DRAFT"
+                : props.data.returnReason.decision === "REJECTED"
+                  ? "REJECTED_RETURNED"
+                  : "NEEDS_CLARIFICATION"
+            }
+          />
+        ) : undefined
+      }
       onClose={handleDialogClose}
-      // Deliberately no backdrop-click-to-close -- confirmed with the
-      // decision-maker after a report of accidentally closing this panel
-      // via a stray click near its edge. The X button (and the browser's
-      // own Escape-key handling, unaffected by this) stay as the only ways
-      // to dismiss it. closedby="none" opts out of the browser's own
-      // native light-dismiss too, not just this file's JS handlers, so
-      // that stays true regardless of a stray click's exact position.
-      closedby="none"
-      aria-labelledby="drawer-title"
-      // Opens from the left edge (decision-maker's call) -- rounded-r-lg,
-      // not rounded-l-lg, since the flush edge is now the left one (a
-      // rounded corner right at the viewport boundary isn't visible
-      // anyway) and the inner edge facing the rest of the page is the
-      // right one.
-      className="drawer-panel fixed inset-y-0 left-0 m-0 h-dvh w-full max-w-xl overflow-y-auto rounded-r-lg bg-white p-6 shadow-xl backdrop:bg-black/40"
+      resetKey={sessionKey}
+      closeRef={closeRef}
     >
-      <div className="flex items-center justify-between border-b border-slate-200 pb-4">
-        <span className="flex items-center gap-2">
-          <h2 id="drawer-title" className="text-lg font-bold text-slate-900">
-            {props.mode === "create" ? "New request" : props.data.voucherNo}
-          </h2>
-          {/* DraftRequestView doesn't carry a status field directly --
-              getDraftRequest only ever returns DRAFT/NEEDS_CLARIFICATION/
-              REJECTED_RETURNED, and returnReason already distinguishes
-              which, the same way EditContent's own banner below does. */}
-          {props.mode === "edit" && (
-            <RequestStatusBadge
-              status={
-                props.data.returnReason === null
-                  ? "DRAFT"
-                  : props.data.returnReason.decision === "REJECTED"
-                    ? "REJECTED_RETURNED"
-                    : "NEEDS_CLARIFICATION"
-              }
-            />
-          )}
-        </span>
-        <button
-          type="button"
-          onClick={handleClose}
-          aria-label="Close"
-          className="-m-2 p-2 text-2xl leading-none text-slate-500 hover:text-slate-700"
-        >
-          &times;
-        </button>
-      </div>
-
-      <div className="flex flex-col gap-6 pt-4">
-        {props.mode === "create" ? (
-          <CreateStep onCreated={props.onCreated} onClose={handleClose} closedRef={closedRef} />
-        ) : props.showWizard ? (
-          // The step-by-step wizard is only for the live moment right
-          // after clicking "Create Request" (RequestsTable.tsx's
-          // openedViaCreate) -- clicking "Edit" on any existing row, even
-          // a never-submitted draft, always shows the flat EditContent
-          // instead. Confirmed with the decision-maker after an earlier
-          // version wrongly kept showing the wizard on every reopen of an
-          // unsubmitted draft, not just the initial creation.
-          // Keyed by request id (not just relying on the props update) so
-          // this component's own internal state -- RequestDetailsFields'
-          // request-type/ministry dropdowns, the signature pad, etc. --
-          // always resets when switching to a different request, even in
-          // the rare case where the outer RequestDrawer instance above
-          // wasn't remounted (see sessionKey's comment).
-          <CreateWizard key={props.data.id} data={props.data} onClose={handleClose} />
-        ) : (
-          <EditContent key={props.data.id} data={props.data} onClose={handleClose} />
-        )}
-      </div>
-    </dialog>
+      {props.mode === "create" ? (
+        <CreateStep onCreated={props.onCreated} onClose={() => closeRef.current?.()} closedRef={closedRef} />
+      ) : props.showWizard ? (
+        // The step-by-step wizard is only for the live moment right
+        // after clicking "Create Request" (RequestsTable.tsx's
+        // openedViaCreate) -- clicking "Edit" on any existing row, even
+        // a never-submitted draft, always shows the flat EditContent
+        // instead. Confirmed with the decision-maker after an earlier
+        // version wrongly kept showing the wizard on every reopen of an
+        // unsubmitted draft, not just the initial creation.
+        // Keyed by request id (not just relying on the props update) so
+        // this component's own internal state -- RequestDetailsFields'
+        // request-type/ministry dropdowns, the signature pad, etc. --
+        // always resets when switching to a different request, even in
+        // the rare case where the outer RequestDrawer instance above
+        // wasn't remounted (see sessionKey's comment).
+        <CreateWizard key={props.data.id} data={props.data} onClose={() => closeRef.current?.()} />
+      ) : (
+        <EditContent key={props.data.id} data={props.data} onClose={() => closeRef.current?.()} />
+      )}
+    </Dialog>
   );
 }
 
@@ -561,6 +517,15 @@ function EditContent({ data, onClose }: { data: DraftRequestView; onClose: () =>
   const [isSubmitPending, startSubmitTransition] = useTransition();
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [showConfirm, setShowConfirm] = useState(false);
+  // A line-item/receipt remove (or a receipt upload) is a server
+  // round-trip followed by router.refresh() -- until that resolves, `data`
+  // still reflects the pre-mutation state. Without this, removing the
+  // only receipt/item and clicking Submit in that window passed
+  // getSubmitBlockingError's check on stale data and opened the confirm
+  // dialog for a request that no longer actually qualified -- found live.
+  const [lineItemsBusy, setLineItemsBusy] = useState(false);
+  const [receiptsBusy, setReceiptsBusy] = useState(false);
+  const stepBusy = lineItemsBusy || receiptsBusy;
 
   function handleSubmitClick() {
     setSubmitError(null);
@@ -627,10 +592,11 @@ function EditContent({ data, onClose }: { data: DraftRequestView; onClose: () =>
             requestId={data.id}
             lineItems={data.lineItems}
             totalAmount={data.totalAmount}
+            onPendingChange={setLineItemsBusy}
           />
         </div>
         <div className="py-6">
-          <ReceiptManager requestId={data.id} receipts={data.receipts} />
+          <ReceiptManager requestId={data.id} receipts={data.receipts} onPendingChange={setReceiptsBusy} />
         </div>
         <div className="pt-6">
           <BankDetailsManager requestId={data.id} bankDetails={data.bankDetails} />
@@ -642,7 +608,7 @@ function EditContent({ data, onClose }: { data: DraftRequestView; onClose: () =>
         {submitError && <ErrorBanner message={submitError} />}
         <div className="flex justify-between">
           <CloseButton onClose={onClose} />
-          <Button disabled={isSubmitPending} onClick={handleSubmitClick}>
+          <Button disabled={isSubmitPending || stepBusy} onClick={handleSubmitClick}>
             {data.returnReason ? "Resubmit" : "Submit"}
           </Button>
         </div>
@@ -692,6 +658,18 @@ function CreateWizard({ data, onClose }: { data: DraftRequestView; onClose: () =
   const [isSubmitPending, startSubmitTransition] = useTransition();
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [showConfirm, setShowConfirm] = useState(false);
+  // A line-item/receipt remove (or a receipt upload) is a server
+  // round-trip followed by router.refresh() -- until that resolves, `data`
+  // still reflects the pre-mutation state. Without this, removing the
+  // only receipt/item and clicking Continue in that window advanced past
+  // this step on stale data, with zero items/receipts actually attached
+  // -- found live. Only gates this step's own Continue button (see
+  // canContinueFromExpenses below) -- step 4's Submit doesn't need the
+  // same guard, since Continue being disabled here already makes it
+  // impossible to reach step 4 while a step-2 mutation is still pending.
+  const [lineItemsBusy, setLineItemsBusy] = useState(false);
+  const [receiptsBusy, setReceiptsBusy] = useState(false);
+  const stepBusy = lineItemsBusy || receiptsBusy;
 
   function goTo(step: WizardStep) {
     if (step > furthestStep) return;
@@ -755,7 +733,7 @@ function CreateWizard({ data, onClose }: { data: DraftRequestView; onClose: () =
   // own check, request-data.ts).
   const receiptRequired = data.requestType !== "CASH_ADVANCE";
   const canContinueFromExpenses =
-    data.lineItems.length > 0 && (!receiptRequired || data.receipts.length > 0);
+    data.lineItems.length > 0 && (!receiptRequired || data.receipts.length > 0) && !stepBusy;
   const canContinueFromPayment = data.bankDetails !== null;
 
   const backButton = (
@@ -786,10 +764,15 @@ function CreateWizard({ data, onClose }: { data: DraftRequestView; onClose: () =
         <>
           <div className="flex flex-col divide-y divide-slate-200">
             <div className="pb-6">
-              <LineItemManager requestId={data.id} lineItems={data.lineItems} totalAmount={data.totalAmount} />
+              <LineItemManager
+                requestId={data.id}
+                lineItems={data.lineItems}
+                totalAmount={data.totalAmount}
+                onPendingChange={setLineItemsBusy}
+              />
             </div>
             <div className="pt-6">
-              <ReceiptManager requestId={data.id} receipts={data.receipts} />
+              <ReceiptManager requestId={data.id} receipts={data.receipts} onPendingChange={setReceiptsBusy} />
             </div>
           </div>
           <div className="flex flex-col gap-2">
@@ -802,7 +785,7 @@ function CreateWizard({ data, onClose }: { data: DraftRequestView; onClose: () =
                 Continue →
               </Button>
             </div>
-            {!canContinueFromExpenses && (
+            {!canContinueFromExpenses && !stepBusy && (
               <p className="text-right text-xs text-slate-500">
                 {data.lineItems.length === 0
                   ? "Add at least one expense to continue."

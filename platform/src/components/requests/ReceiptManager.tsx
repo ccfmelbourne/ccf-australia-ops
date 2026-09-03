@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { uploadReceiptAction, removeReceiptAction } from "@/app/requests/actions";
 import { ErrorBanner } from "@/components/ErrorBanner";
@@ -20,13 +20,27 @@ interface ProcessingFile {
 export function ReceiptManager({
   requestId,
   receipts,
+  onPendingChange,
 }: {
   requestId: string;
   receipts: DraftReceiptView[];
+  // Reports this component's own isPending upward -- a remove (or an
+  // upload) is a server round-trip followed by router.refresh(), and
+  // until that resolves, the `receipts` prop is still the pre-mutation
+  // value. A wizard step's own Continue button gates on receipts.length
+  // alone, so without this, removing the only receipt and clicking
+  // Continue in that window advanced to the next step with none attached
+  // -- found live. The caller factors this into its own gating instead
+  // of this component trying to disable buttons outside itself.
+  onPendingChange?: (pending: boolean) => void;
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [processing, setProcessing] = useState<ProcessingFile[]>([]);
+
+  useEffect(() => {
+    onPendingChange?.(isPending);
+  }, [isPending, onPendingChange]);
   // Scanning defaults on (the previous always-on behavior), but reported
   // as "annoying" when a requester just wants to attach a receipt without
   // it turning into an auto-created line item -- this lets them opt out
