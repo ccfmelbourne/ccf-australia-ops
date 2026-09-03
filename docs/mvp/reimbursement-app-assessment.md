@@ -111,7 +111,7 @@ Full read of the single HTML file (1,939 lines: inline CSS, inline JS, no build 
 
 ### 8. Approval logic — confirmed functional bug
 - Static code inspection found the "Area" `<select id="ministryType">` (line 324) only ever holds values `bendigo | geelong | south-east | tottenham`, while `APPROVERS_BY_MINISTRY` (line 527) and the Oceana-specific branch (line 605: `if (area === 'oceana')`) are keyed on `admin | finance | b1g | comms | oceana`. These values can never match.
-  - **Consequence A:** Approver name suggestions (`names[...]`, line 614) never populate — the reference names shown elsewhere on the form (Ross Callado, Joel Jerez, etc.) never appear in the approval grid.
+  - **Consequence A:** Approver name suggestions (`names[...]`, line 614) never populate — the reference names shown elsewhere on the form (Alex Approver, Jordan Reyes, etc.) never appear in the approval grid.
   - **Consequence B:** The Tier‑4 Regional Director requirement for Oceana (`> $5,000`, documented in the on-page Approval Limits box) can **never** be triggered through the UI — the printed policy and the enforced logic have silently diverged.
   - This directly undermines the one control the form exists to enforce (routing high-value requests to the right approvers). — **CRITICAL**
 - Separately: all tier/approver-count logic runs entirely in client JS with no server-side re-validation. Formspree accepts whatever JSON is POSTed — a user can edit the DOM/JS in devtools (or POST directly to Formspree) to submit a large amount with a single approver, and nothing downstream would catch it. — **HIGH**

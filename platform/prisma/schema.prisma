@@ -30,14 +30,12 @@ enum RequestType {
 }
 
 // Started as the Track A pilot's 10 values, mirrored 1:1. Split
-// COMMS_MEDIA_DGM into COMMS_MEDIA + DGM (2026-08-31): they have different
-// named approvers (Dexter Santiago vs. Moriz Manlangit) -- confirmed each
-// ministry type is assigned its own approver individually, not grouped as
-// the pilot's approval-rules.js did.
-// 2026-09-01: split EVENTS_HOST into EVENTS_RETREAT + HOST -- confirmed
-// these are two distinct ministries with different named overseers (Eland
-// Afuang vs. Lawrence Hernando), same reasoning as the split above. Also
-// fixed the OCEANA_REGIONAL -> OCEANIA_REGIONAL spelling.
+// COMMS_MEDIA_DGM into COMMS_MEDIA + DGM (2026-08-31): confirmed the two
+// have different named approvers, so each ministry type is assigned its
+// own approver individually, not grouped as the pilot's approval-rules.js
+// did. Also split EVENTS_HOST into EVENTS_RETREAT + HOST (2026-09-01) for
+// the same reason, and fixed the OCEANA_REGIONAL -> OCEANIA_REGIONAL
+// spelling.
 enum MinistryType {
   ADMIN
   EXALT_LIVE_PROD
@@ -66,9 +64,9 @@ enum RequestStatus {
 }
 
 // COS1/COS2 aren't ministry-specific or person-specific slots -- they're
-// two claimable positions, open to any of a shared pool of exactly three
-// people (Ross Callado, Joel Jerez, Vamie Pinlac -- approval-routing.ts's
-// COS_POOL). RequiredApproval rows for these roles are created with
+// two claimable positions, open to any of a shared pool of real people
+// (approval-routing.ts's COS_POOL, configured via env, not hardcoded).
+// RequiredApproval rows for these roles are created with
 // approverUserId null and get claimed (approverUserId set) by whichever
 // pool member decides them first -- see approval-data.ts's decideApproval.
 // Corrected 2026-09-02 from an earlier, wrong fixed-slot-per-person model
@@ -142,12 +140,12 @@ model ReimbursementRequest {
   // when a resubmission replaces it.
   requesterSignatureStorageKey String?
 
-  // Set only when Ross Callado (approval-routing.ts's
+  // Set only when the designated confirmer (approval-routing.ts's
   // REGIONAL_DIRECTOR_OVERRIDE_CONFIRMER_EMAIL) explicitly confirms a
   // tier-4 request is within budget, as an alternative to waiting on
   // direct Regional Director approval -- see approval-data.ts's
   // confirmRegionalDirectorOverride/isFullyApproved. Requires COS1+COS2
-  // (already required for tier 4 regardless) to both be APPROVED first.
+  // to both be APPROVED first.
   regionalDirectorOverrideConfirmedAt DateTime?
 
   // Set once each stale-draft reminder tier has been emailed to the

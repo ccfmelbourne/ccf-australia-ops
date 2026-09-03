@@ -12,13 +12,11 @@ export interface AlertProps {
   children: ReactNode;
 }
 
-// The bordered-banner styling ErrorBanner already used for every inline
-// error -- pulled out here as the generic, tone-parameterized primitive.
-// ErrorBanner now builds on this. Only danger/warning exist because
-// they're the only two the app actually needed a flat single-message
-// banner for (RequestDrawer's richer amber "changes requested" box has a
-// heading plus body text, not a single message, so it isn't a fit here
-// and stays as its own markup).
+// The bordered-banner styling ErrorBanner already used, pulled out as a
+// generic tone-parameterized primitive that ErrorBanner now builds on.
+// Only danger/warning exist -- the only two flat single-message banners
+// the app needed (RequestDrawer's richer heading+body box stays its own
+// markup).
 export function Alert({ tone = "danger", children }: AlertProps) {
   return (
     <div role="alert" className={`rounded-md border p-3 text-sm ${TONE_CLASSES[tone]}`}>

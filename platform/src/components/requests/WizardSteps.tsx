@@ -8,11 +8,9 @@ const WIZARD_STEP_LABELS: Record<WizardStep, string> = {
 };
 
 // Step pills jump back freely but never ahead of furthestStep -- reaching
-// a step earns it, it's not a free-form tab bar. Kept in its own file
-// (rather than defined inline in RequestDrawer.tsx, which also imports
-// the create/edit Server Actions) so it -- and its "use client"-free
-// import graph -- can be storied in Storybook without pulling in Prisma
-// and the rest of that server-side dependency graph into the bundle.
+// a step earns it, it's not a free-form tab bar. Kept in its own file so
+// Storybook can story it without pulling in RequestDrawer.tsx's Server
+// Action/Prisma dependency graph.
 export function WizardSteps({
   currentStep,
   furthestStep,

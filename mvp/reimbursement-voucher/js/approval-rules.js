@@ -47,11 +47,11 @@
 
   // Mirrors the "Ministry COS / Overseer Reference" table in index.html.
   var APPROVERS_BY_MINISTRY = {
-    admin: { cos1: 'Ross Callado', cos2: '—', finance: '—', regional: '—', overseer: 'Ross Callado' },
-    finance: { cos1: 'Joel Jerez', cos2: '—', finance: '—', regional: '—', overseer: 'Joel Jerez' },
-    b1g: { cos1: 'Vamie Pinlac', cos2: 'Robert Cruz / Joshua Mangalong', finance: '—', regional: '—', overseer: 'Vamie Pinlac' },
-    comms: { cos1: 'Dexter Santiago', cos2: 'Moriz Manlangit', finance: '—', regional: '—', overseer: 'Dexter Santiago' },
-    oceana: { cos1: 'Ptr. Ryan Escobar', cos2: '—', finance: '—', regional: 'Ptr. Ryan Escobar', overseer: 'Ptr. Ryan Escobar' },
+    admin: { cos1: 'Alex Approver', cos2: '—', finance: '—', regional: '—', overseer: 'Alex Approver' },
+    finance: { cos1: 'Jordan Reyes', cos2: '—', finance: '—', regional: '—', overseer: 'Jordan Reyes' },
+    b1g: { cos1: 'Morgan Cruz', cos2: 'Casey Reyes / Riley Navarro', finance: '—', regional: '—', overseer: 'Morgan Cruz' },
+    comms: { cos1: 'Taylor Santos', cos2: 'Sam Delgado', finance: '—', regional: '—', overseer: 'Taylor Santos' },
+    oceana: { cos1: 'Ptr. Robin Domingo', cos2: '—', finance: '—', regional: 'Ptr. Robin Domingo', overseer: 'Ptr. Robin Domingo' },
   };
 
   var TIER_LABELS = {

@@ -58,9 +58,9 @@ Originally relayed as unconfirmed Track A pilot tester feedback; confirmed with 
 leadership on 2026-08-27:
 
 - For **all** ministry types at the >$5,000 tier (not only Oceana, which is the current Track A
-  pilot rule) — approval from the Regional Director (Ptr. Ryan Escobar) is required by default.
+  pilot rule) — approval from the Regional Director (Ptr. Robin Domingo) is required by default.
 - That requirement has exactly one alternative path: **unanimous** sign-off from all three named
-  COS — **Ross Callado, Joel Jerez, and Vamie Pinlac** — confirming the expense is within the
+  COS — **Alex Approver, Jordan Reyes, and Morgan Cruz** — confirming the expense is within the
   approved budget plan. All three must approve; there is no quorum/subset option.
 - The override is valid **only if the expense is within budget**. If it is not within budget,
   the override cannot be used and Regional Director approval remains mandatory regardless of

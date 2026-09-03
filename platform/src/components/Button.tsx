@@ -13,12 +13,9 @@ export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: ButtonVariant;
 }
 
-// Matches the button styling already used everywhere in the app (teal
-// primary for the main action, slate outline for secondary/cancel, red
-// outline for reject/delete, amber outline for request-changes). Existing
-// call sites still inline these classes directly -- adopting this
-// component there is a separate migration -- but this is the canonical
-// version Storybook documents, and new buttons should use it.
+// Matches the button styling already used app-wide. Existing call sites
+// still inline these classes directly (a separate migration), but new
+// buttons should use this.
 export function Button({ variant = "primary", type = "button", className, ...props }: ButtonProps) {
   return (
     <button

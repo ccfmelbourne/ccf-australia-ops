@@ -1,0 +1,33 @@
+{
+  "namedUsers": {
+    "overseer1": { "name": "Approver One", "email": "approver1@example.org" },
+    "overseer2": { "name": "Approver Two", "email": "approver2@example.org" },
+    "overseer3": { "name": "Approver Three", "email": "approver3@example.org" },
+    "overseer4": { "name": "Approver Four", "email": "approver4@example.org" },
+    "overseer5": { "name": "Approver Five", "email": "approver5@example.org" },
+    "overseer6": { "name": "Approver Six", "email": "approver6@example.org" },
+    "overseer7": { "name": "Approver Seven", "email": "approver7@example.org" },
+    "overseer8": { "name": "Approver Eight", "email": "approver8@example.org" },
+    "overseer9": { "name": "Approver Nine", "email": "approver9@example.org" }
+  },
+  "ministryOverseers": {
+    "ADMIN": "overseer1",
+    "EXALT_LIVE_PROD": "overseer1",
+    "FINANCE": "overseer2",
+    "NXTGEN": "overseer2",
+    "PASTORAL_CARE": "overseer2",
+    "B1G": "overseer9",
+    "ELEVATE": "overseer3",
+    "EVENTS_RETREAT": "overseer5",
+    "HOST": "overseer4",
+    "COMMS_MEDIA": "overseer6",
+    "DGM": "overseer7",
+    "OCEANIA_REGIONAL": "overseer8"
+  },
+  "financeOverseerKey": "overseer2",
+  "regionalDirectorKey": "overseer8",
+  "demoRequest": {
+    "ministryOverseerKey": "overseer6",
+    "cos1Key": "overseer1"
+  }
+}

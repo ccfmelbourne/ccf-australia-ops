@@ -4,20 +4,16 @@ import { within, userEvent } from "storybook/test";
 import { RequestStatusBadge } from "@/components/RequestStatusBadge";
 import { MoneyStat } from "@/components/MoneyStat";
 
-// Full approver-side flow as ONE story -- a play() function clicks
-// through the pending-approvals list, opens an approval, signs, and
-// approves it, automatically. Drives a small self-contained simulator
-// with local state, not the real ApprovalsTable/ApprovalDrawer -- those
-// call real Server Actions (decideApprovalAction) on click, which have no
-// real Next.js server or database behind them in Storybook's Vite
-// runtime. "Signing" is simplified to a button rather than actually
-// automating canvas drawing, which isn't practical to script meaningfully
-// here.
+// Full approver-side flow as ONE story -- play() clicks through the
+// pending-approvals list, opens an approval, signs, and approves it.
+// Drives a small self-contained simulator, not the real
+// ApprovalsTable/ApprovalDrawer, which call real Server Actions with no
+// server/database behind them in Storybook's Vite runtime. "Signing" is
+// simplified to a button rather than automating canvas drawing.
 //
-// ApprovalDrawer only ever shows the one role being decided -- it doesn't
-// surface whether an earlier tier was auto-satisfied (that's the
-// requester's own progress view's job, Patterns/ApprovalProgress), so
-// there's only one variant of this flow.
+// ApprovalDrawer only shows the one role being decided, not whether an
+// earlier tier was auto-satisfied (that's Patterns/ApprovalProgress's
+// job), so there's only one variant of this flow.
 function ApprovalFlowSimulator() {
   const [opened, setOpened] = useState(false);
   const [signed, setSigned] = useState(false);

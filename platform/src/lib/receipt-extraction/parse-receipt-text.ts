@@ -30,16 +30,12 @@ function isKnownTotalsLabel(line: string): boolean {
   return /^(sub\s*-?\s*total|gst|total)\s*:?$/i.test(line);
 }
 
-// Handles a real Vision OCR quirk found via live testing, worth recording:
-// a wide horizontal gap between a right-aligned label column and its
-// amount column (common in receipt totals sections) can make Vision read
-// the whole label column first, then the whole amount column -- e.g.
-// "SUBTOTAL" / "GST" / "TOTAL" as three consecutive lines, followed by
-// "$14.27" / "$1.43" / "$15.70" as the next three, rather than each label
-// staying next to its own amount. When a contiguous run of known label
-// lines is immediately followed by a contiguous run of amount-only lines
-// of the same length, pair them positionally (this also covers the
-// simpler case of a single label immediately followed by its own amount).
+// Handles a real Vision OCR quirk: a wide gap between a right-aligned
+// label column and its amount column can make Vision read the whole
+// label column first, then the whole amount column -- e.g. "SUBTOTAL" /
+// "GST" / "TOTAL" then "$14.27" / "$1.43" / "$15.70", rather than each
+// label staying next to its amount. Pairs a contiguous run of known
+// label lines with an equal-length run of amount-only lines positionally.
 function pairColumnLabelsWithAmounts(lines: string[]): Map<string, number> {
   const trimmed = lines.map((l) => l.trim()).filter((l) => l.length > 0);
   const pairs = new Map<string, number>();
@@ -148,33 +144,29 @@ function stripTrailingMoney(line: string): string {
 }
 
 // A line matching an explicit "Items" section header some POS receipts
-// print above the product list (optionally with its own "$" amount-column
-// header) -- when present, it's a more reliable start-of-items marker than
-// "right after the merchant name", since that gap can otherwise include
-// address/phone/ABN/invoice-type boilerplate that isn't part of any item.
+// print above the product list -- when present, a more reliable
+// start-of-items marker than "right after the merchant name", since that
+// gap can include address/phone/ABN/invoice-type boilerplate.
 const ITEMS_HEADER = /^items?(\s*\$)?$/i;
 
 // Lines that are never part of a product's name, so they're dropped
-// entirely rather than folded into the item description: a bare date, ABN,
-// or SKU/product code (digits only), a line that's *only* a dollar amount
-// (MONEY_ONLY, anchored -- unlike parseMerchant's unanchored MONEY.test,
-// this deliberately does NOT flag a line that mixes real product text with
-// a trailing price, e.g. "Timber pack   $79.48": that line stays and just
-// has its trailing money stripped below), a lone currency symbol or other
-// punctuation-only column-header remnant, or a receipt-boilerplate label.
+// entirely: a bare date, ABN, or SKU (digits only), a line that's *only*
+// a dollar amount (MONEY_ONLY is anchored, unlike parseMerchant's
+// unanchored MONEY.test, so a line mixing real product text with a
+// trailing price, e.g. "Timber pack   $79.48", stays and just has its
+// trailing money stripped below), a lone symbol, or boilerplate.
 const SKU_ONLY = /^\d{3,}$/;
 const SYMBOLS_ONLY = /^[^a-zA-Z0-9]*$/;
 const RECEIPT_BOILERPLATE = /^(tax\s+invoice|invoice|receipt|items?|description)\s*:?$/i;
 
 // A circuit breaker for formal invoices with no "Items" header and no
 // early totals line (e.g. a SaaS subscription invoice) -- without an
-// early boundary, the item block can span almost the whole document
-// (address, billing period, subscription ID...) and still resolve to one
-// dollar amount, since a real invoice often repeats the same total two or
-// three times. Found live: a Renewed Vision invoice produced a ~340
-// character "item" that was really most of the invoice. A real product
-// name is never this long, so past this length the result is noise, not
-// a name -- null (merchant-only) is the safer fallback.
+// early boundary, the item block can span almost the whole document and
+// still resolve to one dollar amount, since a real invoice often repeats
+// its total. Found live: one real invoice produced a ~340 character
+// "item" that was really most of the document. Past this length the
+// result is noise, not a name -- null (merchant-only) is the safer
+// fallback.
 const MAX_ITEM_DESCRIPTION_LENGTH = 100;
 
 function isNoiseLine(line: string): boolean {
@@ -190,18 +182,14 @@ function isNoiseLine(line: string): boolean {
 }
 
 // The product bought, isolated from the block of lines between the
-// merchant (or an explicit "Items" header, when the receipt prints one)
-// and the totals section (SUBTOTAL/GST/TOTAL). Real POS receipts often
-// wrap a product name across several lines and print its price on a line
-// of its own -- not always alongside the name on one line -- so this
-// collects every non-noise line in that block rather than requiring a
-// single text+price line. Only returned when the block contains exactly
-// one distinct dollar amount: a receipt with several items still collapses
-// to one line item at the receipt's total (see uploadReceiptAction),
-// so more than one amount means more than one product, and guessing a
-// single name out of several would misrepresent the purchase -- null is
-// the safer result there, leaving the description as the merchant name
-// alone.
+// merchant (or an explicit "Items" header) and the totals section. Real
+// POS receipts often wrap a product name across several lines and print
+// its price separately, so this collects every non-noise line in that
+// block rather than requiring a single text+price line. Only returned
+// when the block contains exactly one distinct dollar amount -- more than
+// one means more than one product, and guessing a single name out of
+// several would misrepresent the purchase, so null (merchant name alone)
+// is the safer result.
 export function parseItemDescription(text: string): string | null {
   const lines = text
     .split("\n")

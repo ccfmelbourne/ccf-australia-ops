@@ -41,7 +41,7 @@ Capture key decisions, progress, and open items for the repository foundation.
   `specs/0001-reimbursement-approval-finance-workflow.md`. Confirmed with Finance/leadership on
   2026-08-27, including Finance statuses, the Needs Clarification vs. re-approval distinction,
   email as primary notification channel, and a Regional Director/COS-override rule for >$5,000
-  requests (Ross Callado, Joel Jerez, Vamie Pinlac can unanimously override Regional Director
+  requests (Alex Approver, Jordan Reyes, Morgan Cruz can unanimously override Regional Director
   approval, but only if the request is within budget).
 - ADR 0002: platform architecture is a modular monolith on Next.js, TypeScript, Tailwind,
   Storybook, Zod, Prisma, and PostgreSQL, with domain-scoped internal modules (Finance first).
@@ -572,8 +572,8 @@ since they have different named approvers.
   extended to idempotently seed the 9 named `User` rows and 24 assignment rows (11 ministries × 2
   roles + 2 org-wide), run unconditionally near the top of `main()` — confirmed the existing
   demo-request seed block's early-return would otherwise silently skip anything placed after it.
-  Vamie Pinlac (no longer a ministry overseer) is seeded too, ready for the future tier-4-override
-  slice she's still relevant to.
+  Morgan Cruz (no longer a ministry overseer) is seeded too, ready for the future tier-4-override
+  slice they're still relevant to.
 - **Real migration-generator bug found and fixed:** `prisma migrate diff`'s auto-generated SQL for
   splitting the `MinistryType` enum tried to `ALTER TABLE "ApproverAssignment"` *before* that
   table existed (it's created later in the same file) — a genuine ordering bug in Prisma's diff
@@ -602,11 +602,12 @@ since they have different named approvers.
   shows `/approvals` as a static redirect, `/requests` unchanged), `storybook build` clean.
   `npx tsx prisma/seed.ts` run twice against the real database confirmed idempotent (24
   `ApproverAssignment` rows, 9 users, no duplicates). Live: a tier-2 Admin request correctly
-  produced 2 approval rows both assigned to Ross Callado, visible on his `/approvals` view with
+  produced 2 approval rows both assigned to Alex Approver, visible on their `/approvals` view with
   zero bank-detail fields anywhere on the page, and approving both moved the request to `APPROVED`;
-  a tier-4 Oceana request correctly assigned `COS1`/`REGIONAL_DIRECTOR` to Ryan Escobar and
-  `FINANCE_OVERSEER` to Joel Jerez with `COS2` left unassigned, and Joel rejecting it immediately
-  moved the request to `REJECTED_RETURNED` and hid the now-moot pending rows from Ryan's view.
+  a tier-4 Oceana request correctly assigned `COS1`/`REGIONAL_DIRECTOR` to Robin Domingo and
+  `FINANCE_OVERSEER` to Jordan Reyes with `COS2` left unassigned, and Jordan rejecting it
+  immediately moved the request to `REJECTED_RETURNED` and hid the now-moot pending rows from
+  Robin's view.
 - **Follow-up (2026-08-31, same day):** `ReceiptManager`'s upload/remove/scan/confirm errors now
   surface via `sonner` toasts (`<Toaster/>` was already mounted in the root layout but nothing
   called it, since its only prior caller was Finance's status-transition UI, removed in slice 8)

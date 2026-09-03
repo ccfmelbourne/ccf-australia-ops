@@ -1,11 +1,9 @@
 import Link from "next/link";
 
 // A plain outline SVG rather than the 🔔 emoji -- the emoji renders in
-// full color via the OS's own emoji font, which stood out against the
-// rest of the app's monochrome icons/symbols (×, ↑, ✓, ●, ○, all
-// currentColor). This one line-icon path is common/standard (a bell with
-// its clapper), stroked so it inherits text-slate-600 like everything
-// else in the header instead of carrying its own fixed color.
+// full color via the OS's emoji font, standing out against the rest of
+// the app's monochrome icons. Stroked so it inherits text-slate-600 like
+// everything else in the header.
 function BellIcon() {
   return (
     <svg
@@ -24,11 +22,9 @@ function BellIcon() {
   );
 }
 
-// No notification inbox exists in this app -- the badge is a real count
-// (derived from the same getPendingApprovalsForUser count /approvals
-// itself uses), not a decorative one, so it only ever appears when
-// there's something to actually act on. Capped at "9+" past 9 rather than
-// growing the badge to fit an arbitrarily wide number.
+// The badge is a real count (getPendingApprovalsForUser, same one
+// /approvals itself uses), so it only appears when there's something to
+// act on. Capped at "9+" past 9 rather than growing to fit a wide number.
 export function NotificationBell({ pendingApprovalCount }: { pendingApprovalCount: number }) {
   const badgeText = pendingApprovalCount > 9 ? "9+" : String(pendingApprovalCount);
   return (

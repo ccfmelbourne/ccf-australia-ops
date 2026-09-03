@@ -22,12 +22,11 @@ export const REQUEST_TYPE_LABELS: Record<RequestTypeValue, string> = {
 
 // Started as the Track A pilot's 10 values, mirrored 1:1
 // (mvp/reimbursement-voucher/js/approval-rules.js MINISTRY_TYPE_TO_APPROVAL_GROUP).
-// Split COMMS_MEDIA_DGM into COMMS_MEDIA + DGM (2026-08-31): confirmed each
-// ministry type is assigned its own named approver individually, and these
-// two have different people (Dexter Santiago vs. Moriz Manlangit).
-// Split EVENTS_HOST into EVENTS_RETREAT + HOST (2026-09-01): same
-// reasoning -- Eland Afuang vs. Lawrence Hernando. Also fixed the
-// OCEANA_REGIONAL -> OCEANIA_REGIONAL spelling.
+// Split COMMS_MEDIA_DGM into COMMS_MEDIA + DGM (2026-08-31) and EVENTS_HOST
+// into EVENTS_RETREAT + HOST (2026-09-01): confirmed each pair has a
+// different named approver, so each ministry type is assigned its own
+// approver individually. Also fixed the OCEANA_REGIONAL -> OCEANIA_REGIONAL
+// spelling.
 export const MINISTRY_TYPES = [
   "ADMIN",
   "EXALT_LIVE_PROD",
@@ -59,21 +58,13 @@ export const MINISTRY_TYPE_LABELS: Record<MinistryTypeValue, string> = {
   OCEANIA_REGIONAL: "Oceania Regional",
 };
 
-// Mirrors the RequestStatus enum (schema.prisma) -- five values, all of
-// them reachable: a request goes DRAFT -> IN_APPROVAL, then either
-// terminates at APPROVED, or bounces to NEEDS_CLARIFICATION/
-// REJECTED_RETURNED for the requester to fix and resubmit. The old
-// Finance-processing statuses (SUBMITTED/READY_FOR_PROCESSING/PROCESSING/
-// PROCESSED) were removed from the schema entirely 2026-09-02 -- Finance
-// retired from the app, so nothing ever produced them.
-//
-// Single source of truth for status wording/visual language, consumed by
-// RequestStatusBadge.tsx (components/) for the colored badge everywhere
-// the UI shows a request's status (dashboard, request list, request
-// detail, approval screen) -- icon/tone included here rather than
-// duplicated in the component, so there's exactly one place that defines
-// what each status means. "tone" is a semantic bucket, not a literal
-// color, so the badge component owns the actual Tailwind classes.
+// Mirrors the RequestStatus enum (schema.prisma): a request goes DRAFT ->
+// IN_APPROVAL, then terminates at APPROVED, or bounces to
+// NEEDS_CLARIFICATION/REJECTED_RETURNED for the requester to fix and
+// resubmit. Single source of truth for status wording/visual language,
+// consumed by RequestStatusBadge.tsx everywhere the UI shows a status --
+// "tone" is a semantic bucket, not a literal color, so the badge
+// component owns the actual Tailwind classes.
 export type RequestStatusTone = "neutral" | "active" | "warning" | "success" | "danger";
 
 export interface RequestStatusMeta {

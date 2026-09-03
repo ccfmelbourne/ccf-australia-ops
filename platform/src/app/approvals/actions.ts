@@ -54,9 +54,9 @@ export async function requestChangesAction(
   }
 }
 
-// Ross Callado's "within budget" confirmation -- see approval-data.ts's
-// confirmRegionalDirectorOverride for the real authorization/precondition
-// check.
+// The designated confirmer's "within budget" confirmation -- see
+// approval-data.ts's confirmRegionalDirectorOverride for the real
+// authorization/precondition check.
 export async function confirmRegionalDirectorOverrideAction(
   requestId: string,
 ): Promise<{ ok: boolean; error?: string }> {

@@ -6,13 +6,11 @@ import { AppShell } from "@/components/shell/AppShell";
 export const dynamic = "force-dynamic";
 
 // Shared shell (sidebar/header) and auth guard for every signed-in page --
-// Dashboard, My Requests, Approvals (moved from requests/layout.tsx, which
-// only ever covered /requests). The pending-approval count is fetched
-// once here (for the notification bell) rather than separately on
-// /dashboard and /approvals, which both also need approval data of their
-// own -- some duplicate querying across the layout/page boundary is
-// already how this app works elsewhere (Next.js doesn't dedupe Prisma
-// calls automatically), so this isn't a new tradeoff.
+// Dashboard, My Requests, Approvals. The pending-approval count is fetched
+// once here for the notification bell, even though /dashboard and
+// /approvals also query approval data of their own -- Next.js doesn't
+// dedupe Prisma calls automatically, but that's already how this app
+// works elsewhere.
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const userId = await getCurrentUserId();
   if (!userId) {

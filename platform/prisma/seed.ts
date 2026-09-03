@@ -8,6 +8,8 @@
 //
 // Run with: node prisma/seed.ts   (or: npm run db:seed)
 
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { PrismaClient } from "../src/generated/prisma/client.ts";
 import type { MinistryType, ApproverRole } from "../src/generated/prisma/client.ts";
 import { PrismaPg } from "@prisma/adapter-pg";
@@ -17,48 +19,36 @@ import "dotenv/config";
 const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL });
 const prisma = new PrismaClient({ adapter });
 
-// Confirmed 2026-08-31 with the decision-maker -- see .ai/WORKLOG.md and
-// specs/0002-reimbursement-data-model-api.md for the full reasoning. One
-// named Ministry Overseer per ministry type.
-//
-// Corrected 2026-09-01: COS isn't a per-ministry slot at all -- it's a
-// single shared, org-wide pool of exactly three people (COS_POOL,
-// approval-routing.ts), seeded below the same way as Finance
-// Overseer/Regional Director. The original assumption that every Ministry
-// Overseer also automatically held COS1 for their ministry was wrong
-// (confirmed via a real approver, Dexter Santiago, reporting he only holds
-// COMMS_MEDIA's Ministry Overseer role). B1G's overseer also moved back to
-// Vamie Pinlac (Robert Cruz removed).
-const NAMED_USERS = {
-  ross: { name: "Ross Callado", email: "rosscallado@gmail.com" },
-  joel: { name: "Joel Jerez", email: "joel.jmj@gmail.com" },
-  joshua: { name: "Joshua Magalong", email: "joshua.magalong@gmail.com" },
-  lawrence: { name: "Lawrence Hernando", email: "slamboyh72@gmail.com" },
-  eland: { name: "Eland Afuang", email: "eland.afuang@gmail.com" },
-  dexter: { name: "Dexter Santiago", email: "dexsans@gmail.com" },
-  moriz: { name: "Moriz Manlangit", email: "moriz.manlangit@gmail.com" },
-  ryan: { name: "Ptr. Ryan Escobar", email: "ryanescobar@gmail.com" },
-  // B1G's Ministry Overseer (see MINISTRY_OVERSEERS below) and also one of
-  // the three COS_POOL members (approval-routing.ts).
-  vamie: { name: "Vamie Pinlac", email: "vamiebpinlac@gmail.com" },
-} as const;
+// Real approver names/emails live in prisma/seed-data.json (gitignored),
+// not in source -- see prisma/seed-data.example.json for the shape and
+// setup instructions. One named Ministry Overseer per ministry type; COS
+// is a single shared, org-wide pool (COS_POOL, approval-routing.ts), not a
+// per-ministry slot -- not every Ministry Overseer also holds a COS seat.
+interface NamedUser {
+  name: string;
+  email: string;
+}
+interface SeedData {
+  namedUsers: Record<string, NamedUser>;
+  ministryOverseers: Record<MinistryType, string>;
+  financeOverseerKey: string;
+  regionalDirectorKey: string;
+  demoRequest: { ministryOverseerKey: string; cos1Key: string };
+}
 
+const seedDataPath = fileURLToPath(new URL("./seed-data.json", import.meta.url));
+let seedData: SeedData;
+try {
+  seedData = JSON.parse(readFileSync(seedDataPath, "utf-8"));
+} catch {
+  throw new Error(
+    `Missing ${seedDataPath}. Copy prisma/seed-data.example.json to prisma/seed-data.json and fill in real approver names/emails (never committed -- see .gitignore).`,
+  );
+}
+
+const NAMED_USERS = seedData.namedUsers;
 type NamedUserKey = keyof typeof NAMED_USERS;
-
-const MINISTRY_OVERSEERS: Record<MinistryType, NamedUserKey> = {
-  ADMIN: "ross",
-  EXALT_LIVE_PROD: "ross",
-  FINANCE: "joel",
-  NXTGEN: "joel",
-  PASTORAL_CARE: "joel",
-  B1G: "vamie",
-  ELEVATE: "joshua",
-  EVENTS_RETREAT: "eland",
-  HOST: "lawrence",
-  COMMS_MEDIA: "dexter",
-  DGM: "moriz",
-  OCEANIA_REGIONAL: "ryan",
-};
+const MINISTRY_OVERSEERS = seedData.ministryOverseers as Record<MinistryType, NamedUserKey>;
 
 async function upsertOrgWideAssignment(role: ApproverRole, userId: string) {
   const existing = await prisma.approverAssignment.findFirst({
@@ -104,11 +94,11 @@ async function seedApprovers() {
   // generated type requires a real MinistryType there even though the
   // column allows null) -- findFirst + create/update instead for these
   // org-wide rows.
-  await upsertOrgWideAssignment("FINANCE_OVERSEER", users.joel.id);
-  await upsertOrgWideAssignment("REGIONAL_DIRECTOR", users.ryan.id);
+  await upsertOrgWideAssignment("FINANCE_OVERSEER", users[seedData.financeOverseerKey as NamedUserKey].id);
+  await upsertOrgWideAssignment("REGIONAL_DIRECTOR", users[seedData.regionalDirectorKey as NamedUserKey].id);
 
   console.log(
-    `Seeded approvers: 9 users, 14 ApproverAssignment rows (12 Ministry Overseer, 2 org-wide). ${COS_POOL.length} COS pool members are resolved directly by email, not seeded here.`,
+    `Seeded approvers: ${Object.keys(NAMED_USERS).length} users, ${Object.keys(MINISTRY_OVERSEERS).length + 2} ApproverAssignment rows (${Object.keys(MINISTRY_OVERSEERS).length} Ministry Overseer, 2 org-wide). ${COS_POOL.length} COS pool members are resolved directly by email, not seeded here.`,
   );
   return users;
 }
@@ -153,13 +143,13 @@ async function seedDemoRequest(users: Record<NamedUserKey, { id: string }>) {
         create: [
           {
             role: "MINISTRY_OVERSEER",
-            approverUserId: users.dexter.id,
+            approverUserId: users[seedData.demoRequest.ministryOverseerKey as NamedUserKey].id,
             status: "APPROVED",
             decidedAt: new Date("2026-08-19"),
           },
           {
             role: "COS1",
-            approverUserId: users.ross.id,
+            approverUserId: users[seedData.demoRequest.cos1Key as NamedUserKey].id,
             status: "APPROVED",
             decidedAt: new Date("2026-08-19"),
           },

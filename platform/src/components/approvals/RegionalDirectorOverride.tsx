@@ -7,11 +7,11 @@ import { MINISTRY_TYPE_LABELS } from "@/lib/request-types";
 import { ErrorBanner } from "@/components/ErrorBanner";
 import type { RegionalDirectorOverrideOpportunityView } from "@/lib/request-data";
 
-// Visible only to Ross Callado -- getRegionalDirectorOverrideOpportunities
-// (request-data.ts) returns [] for anyone else, so this renders nothing
-// for almost every user. Much lighter than PR #20's OverrideOpportunities:
-// one button, no voting, since this is Ross's own explicit "within
-// budget" confirmation, not a 3-person vote.
+// Visible only to the designated confirmer --
+// getRegionalDirectorOverrideOpportunities (request-data.ts) returns []
+// for anyone else, so this renders nothing for almost every user. One
+// button, no voting, since this is a single person's explicit "within
+// budget" confirmation, not a group vote.
 export function RegionalDirectorOverride({
   opportunities,
 }: {

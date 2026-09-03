@@ -4,12 +4,10 @@ import { useEffect, useRef, useState } from "react";
 import { signOutAction } from "@/app/sign-in/actions";
 import type { UserProfileView } from "@/lib/user-session";
 
-// The one dropdown-with-outside-click-to-close in this app -- everywhere
-// else that needs a dismissible panel is either a native <dialog> (which
-// gets focus-trapping and Escape for free) or a plain inline toggle. A
-// user-menu button doesn't warrant a full Dialog, so this owns its own
+// The one dropdown-with-outside-click-to-close in this app -- a user-menu
+// button doesn't warrant a full Dialog, so this owns its own
 // close-on-outside-click via a document-level mousedown listener,
-// registered only while open and torn down on close/unmount.
+// registered only while open.
 export function UserMenu({ user }: { user: UserProfileView }) {
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);

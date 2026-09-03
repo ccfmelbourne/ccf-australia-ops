@@ -34,11 +34,9 @@ const TIMELINE_ICON_CLASSES: Record<TimelineState, string> = {
 };
 
 // A vertical timeline instead of a plain "role / status" table -- each
-// role gets an icon (checked/waived/rejected/awaiting), a connecting line
-// to the next step, and the actual decision detail (who, when) instead of
-// just a status word. This is the requester's main view of "where is my
-// request," so it's worth more visual weight than a two-column list.
-// Exported so Storybook can story it directly with fixture approval data.
+// role gets an icon, a connecting line, and the decision detail (who,
+// when), since this is the requester's main view of "where is my
+// request." Exported so Storybook can story it directly.
 export function ApprovalTimeline({
   approvals,
   ministryType,
@@ -54,11 +52,11 @@ export function ApprovalTimeline({
       <ol className="flex flex-col">
         {approvals.map((a, i) => {
           const isLast = i === approvals.length - 1;
-          // A tier-4 request can reach APPROVED via Ross Callado's "within
-          // budget" confirmation instead of a direct Regional Director
-          // decision -- his row stays genuinely PENDING forever in that
-          // case (correct data, not a bug; voucher-pdf.tsx represents this
-          // the same way on the final voucher).
+          // A tier-4 request can reach APPROVED via the designated
+          // confirmer's "within budget" confirmation instead of a direct
+          // Regional Director decision -- this row stays genuinely PENDING
+          // forever in that case (correct data, not a bug; voucher-pdf.tsx
+          // represents this the same way on the final voucher).
           const waived =
             a.role === "REGIONAL_DIRECTOR" &&
             a.status === "PENDING" &&
@@ -119,11 +117,10 @@ export function ApprovalTimeline({
   );
 }
 
-// The requester's own read-only view of a submitted (non-editable)
-// request -- there was previously no UI at all for this; RequestsTable
-// only ever showed Edit/Delete for editable statuses, so a submitted
-// request was otherwise invisible until it resolved. Same Dialog
-// side-panel shell RequestDrawer/ApprovalDrawer use.
+// The requester's own read-only view of a submitted request -- previously
+// no UI existed for this; RequestsTable only showed Edit/Delete for
+// editable statuses. Same Dialog side-panel shell RequestDrawer/
+// ApprovalDrawer use.
 export function RequestProgressDrawer({
   data,
   onClose,

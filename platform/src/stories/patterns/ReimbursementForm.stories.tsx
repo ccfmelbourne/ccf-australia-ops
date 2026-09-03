@@ -6,22 +6,16 @@ import { ReviewStep } from "@/components/requests/ReviewStep";
 import { ApprovalTimeline } from "@/components/requests/RequestProgressDrawer";
 import type { DraftRequestView, RequestProgressApprovalView } from "@/lib/request-data";
 
-// Full create-request flow as ONE story each -- a play() function drives
-// the actual clicks/typing through every step automatically, rather than
-// four separate static per-step snapshots. The wizard steps themselves
-// don't differ based on who's submitting; the only difference (a tier
-// auto-satisfied because the requester holds the required role) shows up
-// in the approval timeline shown after "submitting," which is why each
-// flow ends there instead of just closing.
+// Full create-request flow as ONE story each -- play() drives the actual
+// clicks/typing through every step, rather than four static per-step
+// snapshots. The only difference between flows (a tier auto-satisfied
+// because the requester holds the required role) shows up in the
+// approval timeline after "submitting," which is why each flow ends there.
 //
-// This drives a small self-contained simulator with its own local state,
-// not the real CreateWizard/RequestDrawer -- those call real Server
-// Actions on every interaction (add line item, save bank details,
-// submit), which have no real Next.js server or database behind them in
-// Storybook's Vite runtime. The simulator uses request type CASH_ADVANCE
-// so no receipt step is needed, keeping the automated interaction focused
-// on the parts that matter here (details -> line item -> bank details ->
-// review -> submit).
+// Drives a small self-contained simulator, not the real CreateWizard/
+// RequestDrawer, which call Server Actions on every interaction with no
+// server/database behind them in Storybook's Vite runtime. Uses request
+// type CASH_ADVANCE so no receipt step is needed.
 type SimStep = 1 | 2 | 3 | 4;
 
 function ReimbursementFlowSimulator({ endingVariant }: { endingVariant: "general" | "ministryOverseer" }) {
@@ -65,7 +59,7 @@ function ReimbursementFlowSimulator({ endingVariant }: { endingVariant: "general
         ? [
             {
               role: "MINISTRY_OVERSEER",
-              approverName: "Dexter Santiago",
+              approverName: "Taylor Santos",
               status: "AUTO_SATISFIED",
               decidedAt: new Date().toISOString(),
               comments: "Auto-satisfied: requester is the designated Ministry Overseer for this request.",
@@ -93,7 +87,7 @@ function ReimbursementFlowSimulator({ endingVariant }: { endingVariant: "general
   const reviewData: DraftRequestView = {
     id: "story-fixture",
     voucherNo: "CCF-20260902-0123",
-    requesterName: endingVariant === "ministryOverseer" ? "Dexter Santiago" : "Jane Smith",
+    requesterName: endingVariant === "ministryOverseer" ? "Taylor Santos" : "Jane Smith",
     requestType: "CASH_ADVANCE",
     ministryType: endingVariant === "ministryOverseer" ? "COMMS_MEDIA" : "PASTORAL_CARE",
     totalAmount,

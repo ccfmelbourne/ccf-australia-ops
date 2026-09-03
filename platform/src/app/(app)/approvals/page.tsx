@@ -7,11 +7,10 @@ import { RegionalDirectorOverride } from "@/components/approvals/RegionalDirecto
 
 export const dynamic = "force-dynamic";
 
-// Moved off the old combined /requests page onto its own route -- this is
-// the approver-facing half (pending approvals + the Regional Director
-// override opportunities, which getRegionalDirectorOverrideOpportunities
-// scopes to almost no one, returning [] for anyone who isn't Ross
-// Callado -- see that function's own comment).
+// The approver-facing half of the old combined /requests page: pending
+// approvals plus the Regional Director override opportunities, which
+// getRegionalDirectorOverrideOpportunities scopes to almost no one (see
+// that function's own comment).
 export default async function ApprovalsPage() {
   const userId = await getCurrentUserId();
   if (!userId) {
