@@ -1,10 +1,10 @@
 "use client";
 
-import { useRef, useState, useTransition } from "react";
+import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { uploadReceiptAction, removeReceiptAction } from "@/app/requests/actions";
-import { Button } from "@/components/Button";
 import { ErrorBanner } from "@/components/ErrorBanner";
+import { FileDropzone } from "@/components/FileDropzone";
 import { SectionHeading } from "@/components/SectionHeading";
 import { ReceiptProcessingCard, ReceiptCard } from "./ReceiptCard";
 import type { DraftReceiptView } from "@/lib/request-data";
@@ -25,9 +25,7 @@ export function ReceiptManager({
   receipts: DraftReceiptView[];
 }) {
   const router = useRouter();
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const [isPending, startTransition] = useTransition();
-  const [isDragging, setIsDragging] = useState(false);
   const [processing, setProcessing] = useState<ProcessingFile[]>([]);
   // Scanning defaults on (the previous always-on behavior), but reported
   // as "annoying" when a requester just wants to attach a receipt without
@@ -100,21 +98,6 @@ export function ReceiptManager({
     startTransition(() => processFiles(withIds));
   }
 
-  function handleFilesChosen(e: React.ChangeEvent<HTMLInputElement>) {
-    const files = Array.from(e.target.files ?? []);
-    if (fileInputRef.current) fileInputRef.current.value = "";
-    if (files.length === 0) return;
-    addFilesAndProcess(files);
-  }
-
-  function handleDrop(e: React.DragEvent<HTMLDivElement>) {
-    e.preventDefault();
-    setIsDragging(false);
-    const files = Array.from(e.dataTransfer.files);
-    if (files.length === 0) return;
-    addFilesAndProcess(files);
-  }
-
   function handleRemove(receiptId: string) {
     setError(null);
     startTransition(async () => {
@@ -149,57 +132,28 @@ export function ReceiptManager({
 
       {error && <ErrorBanner message={error} />}
 
-      <div
-        onDragOver={(e) => {
-          e.preventDefault();
-          setIsDragging(true);
-        }}
-        onDragLeave={(e) => {
-          e.preventDefault();
-          setIsDragging(false);
-        }}
-        onDrop={handleDrop}
-        className={`flex flex-col items-center gap-2 rounded-md border-2 border-dashed p-6 text-center transition-colors ${
-          isDragging ? "border-teal-500 bg-teal-50" : "border-slate-300"
-        }`}
-      >
-        <span aria-hidden className="text-2xl text-slate-400">↑</span>
-        <p className="text-sm font-medium text-slate-700">Drag &amp; drop receipts</p>
-        <p className="text-xs text-slate-500">or</p>
-        {/* The real file input stays functional (keyboard/AT accessible)
-            but visually hidden -- the button below triggers it. */}
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept={ACCEPTED_TYPES}
-          multiple
-          onChange={handleFilesChosen}
-          tabIndex={-1}
-          aria-hidden
-          className="sr-only"
-        />
-        <Button
-          disabled={isPending}
-          onClick={() => fileInputRef.current?.click()}
-        >
-          {/* Files are processed one at a time (processFiles awaits each
-              upload/scan before starting the next), so `processing` only
-              ever holds 0 or 1 entry -- reflecting its status right on the
-              button the requester just clicked, not just in the card
-              further down the form, since that card can be scrolled out
-              of view on a long form and easy to miss (found live: a
-              report of "no loader" during upload -- the card was there,
-              just not where attention already was). */}
-          {processing.length > 0
+      <FileDropzone
+        accept={ACCEPTED_TYPES}
+        multiple
+        disabled={isPending}
+        onFilesSelected={addFilesAndProcess}
+        // Files are processed one at a time (processFiles awaits each
+        // upload/scan before starting the next), so `processing` only
+        // ever holds 0 or 1 entry -- reflecting its status right on the
+        // button the requester just clicked, not just in the card further
+        // down the form, since that card can be scrolled out of view on a
+        // long form and easy to miss (found live: a report of "no
+        // loader" during upload -- the card was there, just not where
+        // attention already was).
+        buttonLabel={
+          processing.length > 0
             ? processing[0].status === "scanning"
               ? "Scanning…"
               : "Uploading…"
-            : "Upload receipts"}
-        </Button>
-        <p className="text-xs text-slate-500">
-          {processing.length > 0 ? processing[0].filename : "You can upload multiple receipts"}
-        </p>
-      </div>
+            : "Upload receipts"
+        }
+        helperText={processing.length > 0 ? processing[0].filename : "You can upload multiple receipts"}
+      />
 
       {(receipts.length > 0 || processing.length > 0) && (
         <div>
