@@ -10,10 +10,9 @@ export default async function SignInPage({
   searchParams: Promise<{ error?: string }>;
 }) {
   // getCurrentActiveUserId, not the plain cookie-only getCurrentUserId --
-  // a suspended user's still-valid cookie must not count as "already
-  // signed in" here, or this redirects them to /dashboard only for the
-  // (app) layout's own active-user check to immediately bounce them back,
-  // an infinite redirect loop (found live).
+  // a suspended user's still-valid cookie must not redirect here, or the
+  // (app) layout's own active-user check immediately bounces them back
+  // (an infinite redirect loop, found live).
   const userId = await getCurrentActiveUserId();
   if (userId) {
     redirect("/dashboard");
@@ -22,10 +21,8 @@ export default async function SignInPage({
 
   return (
     <main className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden bg-slate-50 p-6">
-      {/* A static (non-looping) decorative gradient, not an ambient
-          background animation -- this page is the one deliberate
-          exception to the app's "no looping/background animation" rule,
-          not a reason to drop it entirely. */}
+      {/* Static, not an ambient loop -- keeps the "no background
+          animation" rule's spirit even on this one exception page. */}
       <div
         aria-hidden
         className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_80%_60%_at_50%_-10%,_var(--color-cyan-100),transparent)]"
