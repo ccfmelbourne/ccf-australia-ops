@@ -462,7 +462,7 @@ pilot's own HTML-voucher-for-email code, `mvp/reimbursement-voucher/js/app.js` a
   (was "Other", now Next.js), and added a `postinstall: prisma generate` script so both CI and
   Vercel generate the Prisma client automatically.
 - Cloudflare R2's data residency question (ADR 0002) is resolved: confirmed with the
-  decision-maker that CCF's requirement is a latency/locality preference, not a hard compliance
+  decision-maker that CCF Australia's requirement is a latency/locality preference, not a hard compliance
   guarantee, so R2 with the `oc` (Oceania) location hint stands as the storage choice. Amazon S3
   in `ap-southeast-2` remains the fallback if that ever changes — see ADR 0002's "Data residency"
   note for the technical reasoning.
@@ -682,7 +682,7 @@ at all. Querying the real database before fixing this found 46 real `User` rows 
 from ordinary use, not just the 9 named approvers plus a demo account — confirming this wasn't
 hypothetical.
 
-Since CCF's real users sign in with personal Gmail addresses (no Workspace domain to restrict to),
+Since CCF Australia's real users sign in with personal Gmail addresses (no Workspace domain to restrict to),
 the fix is a new `User.status` (`ACTIVE`/`SUSPENDED`) allowlist, not a domain check — see
 `adr/0003-ccf-user-allowlist.md` for the full model and reasoning. Concretely:
 - The Google callback route no longer creates `User` rows at all — it only looks up an existing

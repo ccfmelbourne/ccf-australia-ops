@@ -5,7 +5,7 @@ Accepted (2026-09-04) — confirmed directly with the decision-maker, closing a 
 the deployed app: any Google account could sign in and get a working session.
 
 ## Context
-CCF's real users sign in with personal Gmail addresses, not a Google Workspace domain — there is
+CCF Australia's real users sign in with personal Gmail addresses, not a Google Workspace domain — there is
 no `@ccf...` domain to restrict sign-in to, and a naive check like `email.endsWith("@gmail.com")`
 would let essentially anyone in. Before this decision, `src/app/api/auth/google/callback/route.ts`
 did an unconditional `prisma.user.upsert(...)` on every successful Google sign-in: literally any
@@ -62,7 +62,7 @@ Google OAuth still establishes identity exactly as before. A new `User.status` f
 - A brand-new legitimate requester (anyone who isn't already a named approver) must be manually
   added as a `User` row before their first sign-in — there's no self-service path yet. For a small,
   known-membership platform this is an acceptable, explicitly chosen trade-off; it would need
-  revisiting (a real admin UI, or an invite flow) if CCF's real user base grows large enough that
+  revisiting (a real admin UI, or an invite flow) if CCF Australia's real user base grows large enough that
   manual provisioning becomes the bottleneck.
 - No first-class "who added this person, when, why" audit trail beyond whatever the provisioning
   mechanism itself records (a seed-data commit, or direct DB access) — acceptable for now, given
