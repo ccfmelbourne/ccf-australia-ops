@@ -6,8 +6,8 @@ import { Card } from "@/components/Card";
 export function StatCard({ label, count }: { label: string; count: number }) {
   return (
     <Card>
-      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{label}</p>
-      <p className="mt-1 text-3xl font-bold tracking-tight text-slate-900">{count}</p>
+      <p className="text-center text-xs font-semibold uppercase tracking-wide text-slate-500">{label}</p>
+      <p className="mt-1 text-center text-3xl font-bold tracking-tight text-slate-900">{count}</p>
     </Card>
   );
 }

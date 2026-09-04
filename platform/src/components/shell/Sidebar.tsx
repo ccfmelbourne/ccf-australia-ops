@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { getNavItems, isNavItemActive } from "./nav-items";
@@ -25,6 +26,9 @@ export function Sidebar({ isAdmin }: { isAdmin: boolean }) {
           </Link>
         );
       })}
+      <div className="mt-auto flex justify-center pt-4">
+        <Image src="/ccfmelbourne-logo.png" alt="CCF Melbourne" width={80} height={40} />
+      </div>
     </nav>
   );
 }
