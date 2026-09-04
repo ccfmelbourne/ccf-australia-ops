@@ -85,7 +85,7 @@ export const Error: Story = {
 
 export const TooLarge: Story = {
   render: () => (
-    <ErrorBanner message="Receipt file is too large (12,582,912 bytes) — max 10,485,760 bytes." />
+    <ErrorBanner message="Receipt file is too large (6,291,456 bytes) — max 4,194,304 bytes." />
   ),
 };
 

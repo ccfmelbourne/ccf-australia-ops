@@ -115,7 +115,7 @@ export function ReceiptManager({
       <div>
         <SectionHeading>Receipts</SectionHeading>
         <p className="mt-1 text-sm text-slate-600">Upload your official receipts</p>
-        <p className="text-xs text-slate-500">PDF, JPEG, PNG, or HEIC · Maximum 10 MB each</p>
+        <p className="text-xs text-slate-500">PDF, JPEG, PNG, or HEIC · Maximum 4 MB each</p>
         <p className="text-xs text-red-600">
           Scanning may not always get the item right, edit the item if needed.
         </p>

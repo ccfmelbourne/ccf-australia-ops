@@ -59,24 +59,16 @@ export async function setUserAdmin(userId: string, isAdmin: boolean): Promise<vo
   await prisma.user.update({ where: { id: userId }, data: { isAdmin } });
 }
 
-// Deletes this user's own ReimbursementRequest rows first -- that cascades
-// LineItem/Receipt/RequiredApproval/AuditLogEntry/BankDetails for those
-// specific requests (existing schema behavior), so a user who only ever
-// created their own requests (true for every dev-test/smoke-test account)
-// becomes cleanly deletable.
-//
-// RequiredApproval.approverUserId is SET NULL on delete, not RESTRICT --
-// it's a nullable field (claimable COS1/COS2 slots start unclaimed), and
-// Prisma/Postgres default optional relations to SET NULL. Left alone,
-// deleting an approver would silently null out "who approved this" on
-// their real decisions elsewhere instead of blocking the delete --
-// confirmed live: an earlier version of this function let exactly that
-// happen. So this explicitly checks for remaining RequiredApproval rows
-// (on someone *else's* request, after this user's own are already gone)
-// before ever attempting prisma.user.delete(). ApproverAssignment.userId
-// and AuditLogEntry.actorUserId are both required fields and genuinely
-// RESTRICT (confirmed via information_schema), so the try/catch below is
-// real defense-in-depth for those, not the only guard.
+// Deletes this user's own ReimbursementRequest rows first (cascades
+// everything under them), so a user who only ever created their own
+// requests becomes cleanly deletable. The explicit RequiredApproval check
+// below exists because that field is SET NULL on delete, not RESTRICT
+// (it's nullable, for unclaimed COS slots) -- an earlier version relied
+// on the database alone and silently nulled out a real approval's
+// approverUserId instead of blocking the delete (found live).
+// ApproverAssignment.userId/AuditLogEntry.actorUserId are required fields
+// and genuinely RESTRICT (confirmed via information_schema), so the
+// try/catch is real defense-in-depth, not the only guard.
 export async function deleteUser(userId: string): Promise<void> {
   await prisma.reimbursementRequest.deleteMany({ where: { requesterId: userId } });
 

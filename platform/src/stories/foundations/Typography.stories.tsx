@@ -11,7 +11,7 @@ const SAMPLES: { label: string; className: string; example: string }[] = [
   { label: "text-sm font-semibold (labels, button text)", className: "text-sm font-semibold text-slate-900", example: "Office supplies" },
   { label: "text-sm (body text)", className: "text-sm text-slate-700", example: "Sign in with your Google account to continue." },
   { label: "text-xs font-semibold uppercase tracking-wide (section eyebrows)", className: "text-xs font-semibold uppercase tracking-wide text-slate-500", example: "Approval progress" },
-  { label: "text-xs (muted / secondary text)", className: "text-xs text-slate-500", example: "PDF, JPEG, PNG, or HEIC · Maximum 10 MB each" },
+  { label: "text-xs (muted / secondary text)", className: "text-xs text-slate-500", example: "PDF, JPEG, PNG, or HEIC · Maximum 4 MB each" },
   { label: "font-mono (voucher numbers, amounts, filenames)", className: "font-mono text-sm text-slate-700", example: "CCF-20260902-0123" },
 ];
 

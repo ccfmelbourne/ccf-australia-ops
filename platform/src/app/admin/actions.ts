@@ -90,12 +90,11 @@ export async function deleteUserAction(targetUserId: string): Promise<{ ok: bool
   }
 }
 
-// Each user is deleted independently (see admin-data.ts's deleteUsers) --
-// one blocked deletion in the batch must not stop the rest, so this
-// always returns ok: true if it ran at all, with the actual outcome in
-// result. Silently drops the acting admin's own id if somehow included,
-// same self-delete guard as the single-user action, rather than failing
-// the whole batch over it.
+// Each user is deleted independently (admin-data.ts's deleteUsers) -- one
+// blocked deletion must not stop the rest, so this returns ok: true if it
+// ran at all, with the real outcome in `result`. Silently drops the
+// acting admin's own id if somehow included, rather than failing the
+// whole batch over it.
 export async function deleteUsersAction(
   targetUserIds: string[],
 ): Promise<{ ok: boolean; error?: string; result?: BulkDeleteResult }> {
