@@ -16,6 +16,19 @@ function greeting(hour: number): string {
   return "Good evening";
 }
 
+// This renders server-side (Vercel runs in UTC), so the greeting is
+// pinned to Australia/Melbourne -- Intl handles the AEST/AEDT switch
+// automatically, which a fixed UTC offset wouldn't.
+function currentMelbourneHour(): number {
+  return Number(
+    new Intl.DateTimeFormat("en-AU", {
+      timeZone: "Australia/Melbourne",
+      hour: "numeric",
+      hourCycle: "h23",
+    }).format(new Date()),
+  );
+}
+
 export default async function DashboardPage() {
   const userId = await getCurrentUserId();
   if (!userId) {
@@ -41,7 +54,7 @@ export default async function DashboardPage() {
     <div className="flex flex-col gap-8">
       <div>
         <h2 className="text-xl font-bold text-slate-900">
-          {greeting(new Date().getHours())}
+          {greeting(currentMelbourneHour())}
           {user ? `, ${user.name.split(" ")[0]}` : ""}
         </h2>
         <p className="mt-1 text-sm text-slate-600">Here&apos;s what&apos;s happening with your reimbursements.</p>
