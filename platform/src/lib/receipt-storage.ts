@@ -7,7 +7,11 @@ import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 // client pointed at R2's endpoint, so a future migration to real S3 needs
 // no code change here, only different env vars/endpoint.
 
-const MAX_RECEIPT_BYTES = 10 * 1024 * 1024; // 10 MB
+// 4 MB, not the 10 MB this originally allowed -- Vercel Functions have a
+// hard, unconfigurable 4.5 MB request payload ceiling, independent of
+// next.config.ts's own bodySizeLimit. Leaves headroom under that for
+// multipart/form-data overhead.
+const MAX_RECEIPT_BYTES = 4 * 1024 * 1024; // 4 MB
 const ALLOWED_CONTENT_TYPES = new Set([
   "application/pdf",
   "image/jpeg",

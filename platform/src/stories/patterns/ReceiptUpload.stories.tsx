@@ -15,7 +15,7 @@ function ReceiptUploadPattern() {
       <div>
         <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Receipts</h2>
         <p className="mt-1 text-sm text-slate-600">Upload your official receipts</p>
-        <p className="text-xs text-slate-500">PDF, JPEG, PNG, or HEIC · Maximum 10 MB each</p>
+        <p className="text-xs text-slate-500">PDF, JPEG, PNG, or HEIC · Maximum 4 MB each</p>
       </div>
 
       <FileDropzone
