@@ -78,7 +78,10 @@ that an approved reimbursement is ready for processing"** — not a full account
 
 - **Clear testing-phase data from the shared database.** There is no separate staging/production
   database -- local dev and the live app have shared one Neon instance the whole time. Scope
-  confirmed against the actual data (46 `User` rows audited 2026-09-04):
+  confirmed against the actual data (46 `User` rows audited 2026-09-04). Real personal email
+  addresses are deliberately not enumerated here -- query the database directly for the exact
+  current list when doing this, rather than trusting a list that can go stale and shouldn't be
+  committed to source control anyway.
   - **Delete:** every `ReimbursementRequest` row and everything that cascades from it
     (`LineItem`/`Receipt`/`RequiredApproval`/`AuditLogEntry`/`BankDetails`); the demo seed user
     (`john.smith@example.org`); the local dev-login synthetic identities
@@ -87,14 +90,14 @@ that an approved reimbursement is ready for processing"** — not a full account
     `non-committee-*@example.org`); the old Finance-login leftover (`finance@example.org`); two
     stale duplicate rows for real approvers, seeded early with a placeholder `@example.org`
     address before their real Gmail was known (`dexter.santiago@example.org`,
-    `moriz.manlangit@example.org` -- keep the real `@gmail.com` row for each, delete the
-    `@example.org` one); and `gracefulcarelaundry@gmail.com`.
+    `moriz.manlangit@example.org` -- keep the real Gmail row for each, delete the `@example.org`
+    one); and one real-looking business/vendor account of unclear legitimacy.
   - **Keep:** the 9 named approvers' real `User` rows (personal Gmail addresses) and their
     `ApproverAssignment` rows -- real production reference data, not test data.
-  - **Needs a decision, not yet made:** `btcmdex@gmail.com` ("Dex Sans") -- name is similar to
-    named approver Dexter Santiago (`dexsans@gmail.com`) but a different email; could be the same
-    person's second Google account or someone else entirely. Confirm with the decision-maker
-    before deleting or keeping it.
+  - **Needs a decision, not yet made:** one account whose display name closely resembles a named
+    approver's but uses a different email address -- could be the same person's second Google
+    account or someone else entirely. Confirm with the decision-maker before deleting or keeping
+    it.
   - Do this as one of the last steps before go-live, once testing is genuinely finished, not
     before.
 
