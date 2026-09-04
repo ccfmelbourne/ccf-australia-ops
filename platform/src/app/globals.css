@@ -75,4 +75,20 @@ body {
   dialog.drawer-panel[open] {
     animation: drawer-slide-in 180ms ease-out;
   }
+
+  /* Sign-in is a deliberate exception to "deliberately limited motion"
+     above -- it's the one front-door moment before someone enters the
+     restrained internal tool, not the tool itself. Still one-time
+     entrance animation, not a loop -- no background/ambient animation
+     runs continuously, matching the spirit of the rule even here. */
+  @keyframes signin-fade-up {
+    from {
+      opacity: 0;
+      transform: translateY(10px);
+    }
+  }
+
+  .signin-fade-up {
+    animation: signin-fade-up 500ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
 }
