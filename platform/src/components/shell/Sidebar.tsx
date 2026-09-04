@@ -2,15 +2,15 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { NAV_ITEMS, isNavItemActive } from "./nav-items";
+import { getNavItems, isNavItemActive } from "./nav-items";
 
-// Desktop-only (hidden below lg) -- MobileNav renders the same NAV_ITEMS
-// list inside a drawer for narrower viewports instead of this column.
-export function Sidebar() {
+// Desktop-only (hidden below lg) -- MobileNav renders the same nav items
+// inside a drawer for narrower viewports instead of this column.
+export function Sidebar({ isAdmin }: { isAdmin: boolean }) {
   const pathname = usePathname();
   return (
     <nav className="hidden w-56 shrink-0 flex-col gap-1 border-r border-slate-200 bg-white p-4 lg:flex">
-      {NAV_ITEMS.map((item) => {
+      {getNavItems(isAdmin).map((item) => {
         const active = isNavItemActive(pathname, item.href);
         return (
           <Link

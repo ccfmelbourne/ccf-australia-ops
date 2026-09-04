@@ -76,6 +76,10 @@ export async function getCurrentActiveUserId(): Promise<string | null> {
 export interface UserProfileView {
   name: string;
   picture: string | null;
+  // Only a UI nicety here (shows/hides the Admin nav link) -- never the
+  // actual security boundary. admin-data.ts's requireAdmin re-checks this
+  // fresh from the database wherever it's actually enforced.
+  isAdmin: boolean;
 }
 
 // Deliberately here, not in request-data.ts/approval-data.ts -- a user's
@@ -86,6 +90,6 @@ export interface UserProfileView {
 export async function getUserProfile(userId: string): Promise<UserProfileView | null> {
   return prisma.user.findUnique({
     where: { id: userId },
-    select: { name: true, picture: true },
+    select: { name: true, picture: true, isAdmin: true },
   });
 }

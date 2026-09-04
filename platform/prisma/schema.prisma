@@ -116,6 +116,11 @@ model User {
                                 // the row's first successful sign-in backfills it.
   picture   String?    // Google profile picture URL, display only
   status    UserStatus @default(SUSPENDED)
+  // Separate, narrower authorization layer on top of status -- ACTIVE lets
+  // you use the app; isAdmin additionally lets you manage other users and
+  // approver assignments (src/lib/admin-data.ts). Not automatically
+  // granted to named approvers or anyone else.
+  isAdmin   Boolean    @default(false)
   createdAt DateTime   @default(now())
 
   requestsMade        ReimbursementRequest[] @relation("Requester")
