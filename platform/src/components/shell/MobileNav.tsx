@@ -4,20 +4,20 @@ import { useRef } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Dialog } from "@/components/Dialog";
-import { NAV_ITEMS, isNavItemActive } from "./nav-items";
+import { getNavItems, isNavItemActive } from "./nav-items";
 
-// The same NAV_ITEMS list Sidebar renders as a column, shown here inside
-// the existing Dialog component as a slide-in drawer -- reuses its
+// The same nav items Sidebar renders as a column, shown here inside the
+// existing Dialog component as a slide-in drawer -- reuses its
 // showModal()/closedby="none"/left-aligned-panel behavior rather than
 // building a second, parallel drawer implementation.
-export function MobileNav({ onClose }: { onClose: () => void }) {
+export function MobileNav({ onClose, isAdmin }: { onClose: () => void; isAdmin: boolean }) {
   const closeRef = useRef<(() => void) | null>(null);
   const pathname = usePathname();
 
   return (
     <Dialog titleId="mobile-nav-title" title="Menu" onClose={onClose} closeRef={closeRef}>
       <nav className="flex flex-col gap-1">
-        {NAV_ITEMS.map((item) => {
+        {getNavItems(isAdmin).map((item) => {
           const active = isNavItemActive(pathname, item.href);
           return (
             <Link
