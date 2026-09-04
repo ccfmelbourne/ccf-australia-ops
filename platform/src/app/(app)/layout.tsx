@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { getCurrentUserId, getUserProfile } from "@/lib/user-session";
+import { getCurrentActiveUserId, getUserProfile } from "@/lib/user-session";
 import { getPendingApprovalsForUser } from "@/lib/approval-data";
 import { AppShell } from "@/components/shell/AppShell";
 
@@ -11,8 +11,16 @@ export const dynamic = "force-dynamic";
 // /approvals also query approval data of their own -- Next.js doesn't
 // dedupe Prisma calls automatically, but that's already how this app
 // works elsewhere.
+//
+// Uses getCurrentActiveUserId, not the plain cookie-only getCurrentUserId
+// -- a suspended user's still-valid session cookie must stop working here
+// immediately, not just at their next sign-in. Redirects plain (no error
+// param) either way: this can't tell "never signed in" apart from
+// "suspended," and showing "Access denied" to someone who simply hasn't
+// signed in yet would be misleading -- that message only belongs to an
+// actual rejected sign-in attempt (the Google callback route).
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
-  const userId = await getCurrentUserId();
+  const userId = await getCurrentActiveUserId();
   if (!userId) {
     redirect("/sign-in");
   }

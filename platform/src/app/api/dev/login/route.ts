@@ -23,10 +23,15 @@ export async function GET(request: NextRequest) {
       ? { email: DEV_TEST_APPROVER_EMAIL, name: "Dev Test Approver" }
       : { email: DEV_TEST_REQUESTER_EMAIL, name: "Dev Test Requester" };
 
+  // status explicitly ACTIVE (not left to the schema's SUSPENDED default)
+  // -- these synthetic identities only ever exist to test the app itself,
+  // so there's no real "suspend a dev test user" scenario to defend
+  // against, and NODE_ENV already keeps this route unreachable in
+  // production.
   const user = await prisma.user.upsert({
     where: { email: identity.email },
-    update: {},
-    create: { email: identity.email, name: identity.name },
+    update: { status: "ACTIVE" },
+    create: { email: identity.email, name: identity.name, status: "ACTIVE" },
   });
 
   await createUserSession(user.id);

@@ -61,6 +61,18 @@ export async function getCurrentUserId(): Promise<string | null> {
   return parseCookieValue(cookieStore.get(COOKIE_NAME)?.value);
 }
 
+// A valid session cookie alone isn't enough -- if an admin suspends
+// someone mid-session, that must take effect immediately (this request
+// on), not just at their next sign-in. Everywhere real access is gated
+// (the (app) layout, every Server Action) should call this instead of the
+// plain cookie-only getCurrentUserId above.
+export async function getCurrentActiveUserId(): Promise<string | null> {
+  const userId = await getCurrentUserId();
+  if (!userId) return null;
+  const user = await prisma.user.findUnique({ where: { id: userId }, select: { status: true } });
+  return user?.status === "ACTIVE" ? userId : null;
+}
+
 export interface UserProfileView {
   name: string;
   picture: string | null;

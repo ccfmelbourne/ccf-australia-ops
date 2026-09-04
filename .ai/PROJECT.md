@@ -74,6 +74,30 @@ Ground rules for this phase, decided explicitly rather than drifted into:
 The reminder worth keeping visible: V1 Finance scope is essentially **"inform the accountant
 that an approved reimbursement is ready for processing"** — not a full accounting system.
 
+### Pre-launch checklist (before official launch)
+
+- **Clear testing-phase data from the shared database.** There is no separate staging/production
+  database -- local dev and the live app have shared one Neon instance the whole time. Scope
+  confirmed against the actual data (46 `User` rows audited 2026-09-04):
+  - **Delete:** every `ReimbursementRequest` row and everything that cascades from it
+    (`LineItem`/`Receipt`/`RequiredApproval`/`AuditLogEntry`/`BankDetails`); the demo seed user
+    (`john.smith@example.org`); the local dev-login synthetic identities
+    (`dev-requester@test.local`/`dev-approver@test.local`/`dev-approval-reminder-verify@test.local`);
+    the ~28 automated-smoke-test `User` rows (`smoke-req-*@example.org`,
+    `non-committee-*@example.org`); the old Finance-login leftover (`finance@example.org`); two
+    stale duplicate rows for real approvers, seeded early with a placeholder `@example.org`
+    address before their real Gmail was known (`dexter.santiago@example.org`,
+    `moriz.manlangit@example.org` -- keep the real `@gmail.com` row for each, delete the
+    `@example.org` one); and `gracefulcarelaundry@gmail.com`.
+  - **Keep:** the 9 named approvers' real `User` rows (personal Gmail addresses) and their
+    `ApproverAssignment` rows -- real production reference data, not test data.
+  - **Needs a decision, not yet made:** `btcmdex@gmail.com` ("Dex Sans") -- name is similar to
+    named approver Dexter Santiago (`dexsans@gmail.com`) but a different email; could be the same
+    person's second Google account or someone else entirely. Confirm with the decision-maker
+    before deleting or keeping it.
+  - Do this as one of the last steps before go-live, once testing is genuinely finished, not
+    before.
+
 ## Scope
 - Define the Finance domain for reimbursement and disbursement workflows.
 - Create a reference architecture and repository foundation.

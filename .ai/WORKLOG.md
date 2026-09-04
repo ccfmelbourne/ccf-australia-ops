@@ -672,3 +672,45 @@ since they have different named approvers.
     reversal made without re-reading slice 10 first, not a decision that re-derived the original
     tradeoff from scratch. Flagging it here so a future slice doesn't re-litigate this blind.
   - `Settings` was deliberately left out of the sidebar (no feature exists yet to back it).
+
+## Slice 12: CCF User Allowlist — Gate Google Sign-In on Server-Side Authorization (2026-09-04)
+
+Found and closed a real access-control gap: the Google OAuth callback did an unconditional
+`prisma.user.upsert(...)` on every successful sign-in, so any Google account — CCF-affiliated or
+not — could sign in and get a working requester session. `User` had no concept of account status
+at all. Querying the real database before fixing this found 46 real `User` rows already existed
+from ordinary use, not just the 9 named approvers plus a demo account — confirming this wasn't
+hypothetical.
+
+Since CCF's real users sign in with personal Gmail addresses (no Workspace domain to restrict to),
+the fix is a new `User.status` (`ACTIVE`/`SUSPENDED`) allowlist, not a domain check — see
+`adr/0003-ccf-user-allowlist.md` for the full model and reasoning. Concretely:
+- The Google callback route no longer creates `User` rows at all — it only looks up an existing
+  row by email and denies sign-in (one generic message, so the response can't be used to
+  enumerate suspended vs. never-registered emails) if none exists or it isn't `ACTIVE`.
+- A new `getCurrentActiveUserId()` (`src/lib/user-session.ts`) wraps the existing cookie-only
+  `getCurrentUserId()` with a live status check, used by the `(app)` layout and every
+  request/approval Server Action — so suspending someone takes effect immediately, not just at
+  their next sign-in, even if they already hold a valid 30-day session cookie.
+- A hand-written migration (`20260904013711_add_user_status`) backfilled every pre-existing row to
+  `ACTIVE` before switching the column's default to `SUSPENDED` for anything created from that
+  point on — nobody already legitimately using the app was locked out by this change.
+- `prisma/seed.ts` now sets `status: "ACTIVE"` on create only (not on update), so re-running the
+  seed script can never silently un-suspend someone an admin deliberately flipped via Prisma
+  Studio. `src/app/api/dev/login/route.ts`'s own synthetic-identity upsert needed the same
+  explicit `status: "ACTIVE"` treatment, or local dev sign-in would have broken the moment the new
+  default landed.
+
+Verified: full `tsc`/lint/test/storybook/build suite clean; queried the real database directly to
+confirm all 46 pre-existing rows came back `ACTIVE` after the migration; exercised the actual
+allow/deny query logic live against a known-real `ACTIVE` approver, a genuinely nonexistent email,
+and a temporarily-created `SUSPENDED` test row (all four cases behaved correctly, test row cleaned
+up after); re-ran `npm run db:seed` and confirmed it doesn't disturb existing status values; and
+ran both `/api/dev/login` flows (requester and approver) end-to-end against a live dev server,
+confirming `/dashboard` and `/approvals` still load correctly under the new
+`getCurrentActiveUserId` gate.
+
+No admin UI for provisioning new users exists yet, deliberately — for now, a new CCF requester who
+isn't already a named approver is added as a `User` row via `prisma/seed-data.json` or Prisma
+Studio (`npm run db:studio`) before their first sign-in. Revisit if/when manual provisioning
+becomes a real bottleneck.
