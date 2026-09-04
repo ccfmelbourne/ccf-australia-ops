@@ -1,6 +1,6 @@
 "use server";
 
-import { getCurrentUserId } from "@/lib/user-session";
+import { getCurrentActiveUserId } from "@/lib/user-session";
 import { decideApproval, requestChanges, confirmRegionalDirectorOverride } from "@/lib/approval-data";
 
 const DATA_URL_PREFIX = /^data:image\/png;base64,/;
@@ -11,7 +11,7 @@ export async function decideApprovalAction(
   comments: string,
   signatureDataUrl: string | null,
 ): Promise<{ ok: boolean; error?: string }> {
-  const userId = await getCurrentUserId();
+  const userId = await getCurrentActiveUserId();
   if (!userId) {
     return { ok: false, error: "Not signed in." };
   }
@@ -39,7 +39,7 @@ export async function requestChangesAction(
   approvalId: string,
   comments: string,
 ): Promise<{ ok: boolean; error?: string }> {
-  const userId = await getCurrentUserId();
+  const userId = await getCurrentActiveUserId();
   if (!userId) {
     return { ok: false, error: "Not signed in." };
   }
@@ -60,7 +60,7 @@ export async function requestChangesAction(
 export async function confirmRegionalDirectorOverrideAction(
   requestId: string,
 ): Promise<{ ok: boolean; error?: string }> {
-  const userId = await getCurrentUserId();
+  const userId = await getCurrentActiveUserId();
   if (!userId) {
     return { ok: false, error: "Not signed in." };
   }

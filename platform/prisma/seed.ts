@@ -68,7 +68,10 @@ async function seedApprovers() {
     users[key] = await prisma.user.upsert({
       where: { email },
       update: { name },
-      create: { name, email },
+      // status only set on create -- re-running this script must never
+      // silently un-suspend someone an admin deliberately flipped to
+      // SUSPENDED via Prisma Studio.
+      create: { name, email, status: "ACTIVE" },
     });
   }
 

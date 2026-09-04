@@ -61,7 +61,7 @@ hint, with Amazon S3 as the named fallback.** Vercel Blob was considered and is 
 viable, but was not chosen — the priority is storage portability and a clean path toward AWS if
 the platform ever migrates, which an S3-compatible API gives for free. R2 was preferred over S3
 itself for V1 on cost/egress grounds while staying API-compatible with the AWS fallback.
-Confirmed directly with the project's decision-maker (2026-08-28) that CCF's data residency
+Confirmed directly with the project's decision-maker (2026-08-28) that CCF Australia's data residency
 need here is a latency/locality preference, not a hard compliance guarantee — see "Data
 residency" below for the technical reasoning that decision rests on.
 
@@ -106,7 +106,7 @@ only one is an enforceable guarantee:
   only available for `eu`, `fedramp`, and `us` — there is no Australia or APAC jurisdictional
   restriction, and the jurisdiction can't be changed after a bucket is created.
 
-The project's decision-maker confirmed CCF's actual need here is a latency/locality preference,
+The project's decision-maker confirmed CCF Australia's actual need here is a latency/locality preference,
 not a hard compliance guarantee (no Privacy Act, funder, or board policy mandates an enforced
 Australia-only guarantee for this data). That makes R2's `oc` location hint sufficient, so the
 storage choice above stands. If that changes later, the fallback is Amazon S3 in `ap-southeast-2`

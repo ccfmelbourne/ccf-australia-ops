@@ -23,17 +23,20 @@ export async function GET(request: NextRequest) {
 
   const profile = await resolveGoogleProfile(code, codeVerifier);
 
-  // Same "identity == User row by email" pattern as
-  // getOrCreateAccountantUser in src/app/finance/actions.ts.
-  const user = await prisma.user.upsert({
-    where: { email: profile.email },
-    update: { googleSub: profile.sub, picture: profile.picture },
-    create: {
-      email: profile.email,
-      name: profile.name,
-      googleSub: profile.sub,
-      picture: profile.picture,
-    },
+  // No code path creates a User row from sign-in -- only an admin
+  // provisions one (prisma/seed.ts or Prisma Studio), per
+  // adr/0003-ccf-user-allowlist.md. One generic denial for both "no such
+  // user" and "found but SUSPENDED", so the response can't be used to
+  // enumerate which emails belong to suspended vs. never-registered
+  // people.
+  const existing = await prisma.user.findUnique({ where: { email: profile.email } });
+  if (!existing || existing.status !== "ACTIVE") {
+    return NextResponse.redirect(new URL("/sign-in?error=not_authorized", request.url));
+  }
+
+  const user = await prisma.user.update({
+    where: { id: existing.id },
+    data: { googleSub: profile.sub, picture: profile.picture },
   });
 
   await createUserSession(user.id);

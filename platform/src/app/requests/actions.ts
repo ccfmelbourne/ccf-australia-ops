@@ -1,7 +1,7 @@
 "use server";
 
 import { z } from "zod";
-import { getCurrentUserId } from "@/lib/user-session";
+import { getCurrentActiveUserId } from "@/lib/user-session";
 import {
   createDraftRequest,
   addLineItem,
@@ -40,7 +40,7 @@ export async function createDraftRequestForDrawerAction(
   requestType: string,
   ministryType: string,
 ): Promise<{ ok: boolean; id?: string; voucherNo?: string; requesterName?: string; error?: string }> {
-  const userId = await getCurrentUserId();
+  const userId = await getCurrentActiveUserId();
   if (!userId) {
     return { ok: false, error: "Not signed in." };
   }
@@ -73,7 +73,7 @@ export async function updateRequestDetailsAction(
   requestType: string,
   ministryType: string,
 ): Promise<{ ok: boolean; error?: string }> {
-  const userId = await getCurrentUserId();
+  const userId = await getCurrentActiveUserId();
   if (!userId) {
     return { ok: false, error: "Not signed in." };
   }
@@ -99,7 +99,7 @@ export async function updateRequestDetailsAction(
 export async function deleteRequestAction(
   requestId: string,
 ): Promise<{ ok: boolean; error?: string }> {
-  const userId = await getCurrentUserId();
+  const userId = await getCurrentActiveUserId();
   if (!userId) {
     return { ok: false, error: "Not signed in." };
   }
@@ -121,7 +121,7 @@ export async function submitRequestAction(
   requestId: string,
   signatureDataUrl: string,
 ): Promise<{ ok: boolean; error?: string }> {
-  const userId = await getCurrentUserId();
+  const userId = await getCurrentActiveUserId();
   if (!userId) {
     return { ok: false, error: "Not signed in." };
   }
@@ -150,7 +150,7 @@ export async function addLineItemAction(
   description: string,
   amount: string,
 ): Promise<{ ok: boolean; error?: string }> {
-  const userId = await getCurrentUserId();
+  const userId = await getCurrentActiveUserId();
   if (!userId) {
     return { ok: false, error: "Not signed in." };
   }
@@ -171,7 +171,7 @@ export async function addLineItemAction(
 export async function removeLineItemAction(
   lineItemId: string,
 ): Promise<{ ok: boolean; error?: string }> {
-  const userId = await getCurrentUserId();
+  const userId = await getCurrentActiveUserId();
   if (!userId) {
     return { ok: false, error: "Not signed in." };
   }
@@ -191,7 +191,7 @@ export async function updateLineItemAction(
   description: string,
   amount: string,
 ): Promise<{ ok: boolean; error?: string }> {
-  const userId = await getCurrentUserId();
+  const userId = await getCurrentActiveUserId();
   if (!userId) {
     return { ok: false, error: "Not signed in." };
   }
@@ -222,7 +222,7 @@ export async function uploadReceiptAction(
   requestId: string,
   formData: FormData,
 ): Promise<{ ok: boolean; error?: string }> {
-  const userId = await getCurrentUserId();
+  const userId = await getCurrentActiveUserId();
   if (!userId) {
     return { ok: false, error: "Not signed in." };
   }
@@ -284,7 +284,7 @@ export async function uploadReceiptAction(
 export async function removeReceiptAction(
   receiptId: string,
 ): Promise<{ ok: boolean; error?: string }> {
-  const userId = await getCurrentUserId();
+  const userId = await getCurrentActiveUserId();
   if (!userId) {
     return { ok: false, error: "Not signed in." };
   }
@@ -313,7 +313,7 @@ export async function saveBankDetailsAction(
   requestId: string,
   formData: FormData,
 ): Promise<{ ok: boolean; error?: string }> {
-  const userId = await getCurrentUserId();
+  const userId = await getCurrentActiveUserId();
   if (!userId) {
     return { ok: false, error: "Not signed in." };
   }
